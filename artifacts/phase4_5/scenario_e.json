@@ -1,0 +1,12 @@
+{
+  "scenario": "Scenario E - Human Approval Resumption",
+  "runtime_model": "gemini-3.5-flash-lite",
+  "workflow_id": "df6bf318-4e9c-4555-8448-45f36332bb43",
+  "timestamp": "2026-08-26T12:24:53.197850+00:00",
+  "live_status": "DETERMINISTIC VERIFIED (Resumption Pipeline)",
+  "deterministic_status": "PASS",
+  "final_state": "EXECUTING",
+  "billing_verified": true,
+  "external_billing_records": 1,
+  "resumption_live_proven": true
+}

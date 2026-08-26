@@ -1,0 +1,13 @@
+{
+  "scenario": "Scenario B - Constraint Filtering",
+  "runtime_model": "gemini-3.5-flash-lite",
+  "workflow_id": "68304465-7c72-4237-ad6c-9dc93bfb942e",
+  "timestamp": "2026-08-26T12:24:00.391892+00:00",
+  "live_status": "LIVE VERIFIED",
+  "deterministic_status": "PASS",
+  "error_detail": null,
+  "recovery_plans_count": 1,
+  "selected_provider": "square",
+  "expected_provider": "square",
+  "constraint_filtering_live_proven": true
+}

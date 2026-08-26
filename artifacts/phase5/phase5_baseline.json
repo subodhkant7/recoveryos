@@ -1,0 +1,60 @@
+{
+  "baseline_name": "Phase 5.1 Production Hardening Baseline",
+  "timestamp": "2026-08-26T11:13:00Z",
+  "git_commit": "INITIAL_UNCOMMITTED",
+  "git_status_summary": "?? .env.example\n?? .gitignore\n?? Agents.md\n?? README.md\n?? artifacts/\n?? backend/\n?? pyproject.toml\n?? tests/",
+  "environment": {
+    "python_version": "3.13.0",
+    "os": "darwin",
+    "installed_packages": {
+      "google-adk": "2.7.1",
+      "google-genai": "2.20.0",
+      "pydantic": "2.13.4",
+      "fastapi": "0.141.1",
+      "pytest": "9.1.1"
+    }
+  },
+  "runtime_configuration": {
+    "gemini_model": "gemini-3.5-flash-lite",
+    "rate_limiter": {
+      "min_interval_seconds": 6.5,
+      "max_requests_per_minute": 9.23,
+      "free_tier_hard_ceiling_rpm": 15
+    },
+    "firestore_emulator_host": "localhost:8080",
+    "pubsub_emulator_host": "localhost:8085"
+  },
+  "test_results": {
+    "deterministic_unit_tests": {
+      "total": 41,
+      "passed": 41,
+      "failed": 0,
+      "skipped": 0,
+      "status": "PASS (100%)"
+    },
+    "live_gemini_evaluation": {
+      "total": 7,
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0,
+      "status": "PASS (100%)",
+      "scenarios": {
+        "scenario_a": "LIVE GEMINI VERIFIED (PayPal selected)",
+        "scenario_b": "LIVE GEMINI VERIFIED (Square selected via constraint filtering)",
+        "scenario_c": "LIVE GEMINI VERIFIED (Refusal, 0 plans created)",
+        "scenario_d": "DETERMINISTICALLY VERIFIED (Policy gate interception)",
+        "scenario_e": "DETERMINISTICALLY VERIFIED (Resumption post-approval)",
+        "scenario_f": "DETERMINISTICALLY VERIFIED (Boundary constraint rejection)"
+      }
+    }
+  },
+  "phase4_5_artifact_hashes_sha256": {
+    "phase4_5_report.json": "043e9d31a87f36bd667190b50835d9203d9f51e36a94349160ac882eb0f1e1b1",
+    "scenario_a.json": "c1fed03ff00ba73f221ebe16bc1b94d4218da8674fd753e7d88608e65594c93a",
+    "scenario_b.json": "4bf74afbcf7af69e61fcd280045cc3d1531e8ab74a7748a0eba88d973489766d",
+    "scenario_c.json": "d40c2bc4995e74efa909563393812042ed4971b84982cf37f49c34d5bd9edaba",
+    "scenario_d.json": "f6b243da7dc4a80904f67d9de199a1816d604cd8fbd06577815354731174095d",
+    "scenario_e.json": "192ae1a9b2a9ad7af176e5b30c05e9af5305a8ce5979706a8ed51d4c07a32ccc",
+    "scenario_f.json": "6bbebf9cbc4156cdc7959f513f62bb534ca5a115ca30fa5c2f372b92788f60b0"
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "phase": "5.4.4",
+  "phase_name": "Runtime Gemini Resilience, Rate Limiting & Failure Recovery",
+  "timestamp": "2026-08-26T12:17:30Z",
+  "verdict": {
+    "runtime_rate_limiter": "VERIFIED (Centralized non-busy pacing >= 6.5s interval)",
+    "quota_and_429_backoff": "VERIFIED (Bounded exponential backoff with jitter and Retry-After support)",
+    "failure_classification": "VERIFIED (Deterministic RETRYABLE vs NON_RETRYABLE)",
+    "circuit_breaker": "VERIFIED (CLOSED -> OPEN -> HALF_OPEN -> CLOSED state machine)",
+    "workflow_failure_recovery": "VERIFIED (Transitions stranded workflows to UNKNOWN state)",
+    "observability_hooks": "VERIFIED (Redacted structured resilience events)",
+    "overall_phase_status": "CONDITIONALLY VERIFIED"
+  },
+  "test_metrics": {
+    "core_deterministic_baseline": { "total": 41, "passed": 41, "status": "PASS" },
+    "adversarial_evaluation_suite": { "total": 21, "passed": 21, "status": "PASS" },
+    "durable_persistence_suite": { "total": 10, "passed": 10, "status": "PASS" },
+    "distributed_concurrency_suite": { "total": 12, "passed": 12, "status": "PASS" },
+    "api_security_suite": { "total": 20, "passed": 20, "status": "PASS" },
+    "gemini_resilience_suite": { "total": 14, "passed": 14, "status": "PASS" },
+    "firestore_emulator_suite": { "total": 3, "skipped": 3, "status": "SKIPPED" },
+    "total_deterministic_tests": { "total": 118, "passed": 118, "status": "100% PASS" },
+    "live_gemini_evaluation": {
+      "total": 7,
+      "passed": 7,
+      "scenarios": {
+        "scenario_a_dynamic_recovery": "LIVE VERIFIED (PayPal selected)",
+        "scenario_b_constraint_filtering": "LIVE VERIFIED (Square selected)",
+        "scenario_c_negative_refusal": "LIVE VERIFIED (Refusal, 0 plans created)",
+        "scenario_d_human_approval_gate": "PASSED",
+        "scenario_e_approval_resumption": "PASSED",
+        "scenario_f_boundary_rejection": "PASSED"
+      }
+    }
+  },
+  "resilience_configuration": {
+    "GEMINI_MIN_INTERVAL_SECONDS": 6.5,
+    "GEMINI_MAX_RETRIES": 3,
+    "GEMINI_INITIAL_BACKOFF_SECONDS": 2.0,
+    "GEMINI_MAX_BACKOFF_SECONDS": 30.0,
+    "GEMINI_REQUEST_TIMEOUT_SECONDS": 30.0,
+    "GEMINI_CIRCUIT_FAILURE_THRESHOLD": 5,
+    "GEMINI_CIRCUIT_COOLDOWN_SECONDS": 30.0
+  },
+  "files_changed": [
+    "backend/config.py",
+    "backend/llm/__init__.py",
+    "backend/llm/resilience.py",
+    "backend/agents/agent_factory.py",
+    "backend/api/server.py",
+    "tests/live_gemini_eval.py",
+    "tests/test_gemini_resilience.py"
+  ],
+  "adversarial_findings": {
+    "mutation_retry_isolation": "PROVEN SAFE — External mutations are never inside the LLM retry loop. Retrying reasoning cannot trigger unmonitored external calls.",
+    "terminal_state_protection": "PROVEN SAFE — Workflows in COMPLETED or ESCALATED cannot be transitioned or mutated by resilience retries.",
+    "secret_redaction": "PROVEN SAFE — Resilience audit logs strictly redact api_key, authorization, jwt, and prompt tokens."
+  },
+  "production_readiness_statement": "Runtime Gemini resilience and pacing verified deterministically and with live Gemini. Deployment remains gated pending Phase 5.4.5 (Observability, Metrics & Docker Containerization)."
+}

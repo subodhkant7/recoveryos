@@ -1,0 +1,43 @@
+{
+  "evaluation_name": "Phase 4.5 Live Gemini Agent Evaluation",
+  "runtime_gemini_model": "gemini-3.5-flash-lite",
+  "generated_at": "2026-08-26T12:24:53.204041+00:00",
+  "scenarios": {
+    "scenario_a": {
+      "name": "Scenario A - Unique Dynamic Recovery",
+      "live_status": "LIVE VERIFIED",
+      "deterministic_status": "PASS",
+      "workflow_id": "631ab1ba-2271-4ec5-b67a-33a080191a81"
+    },
+    "scenario_b": {
+      "name": "Scenario B - Constraint Filtering",
+      "live_status": "LIVE VERIFIED",
+      "deterministic_status": "PASS",
+      "workflow_id": "68304465-7c72-4237-ad6c-9dc93bfb942e"
+    },
+    "scenario_c": {
+      "name": "Scenario C - Negative (No Valid Recovery)",
+      "live_status": "LIVE VERIFIED",
+      "deterministic_status": "PASS",
+      "workflow_id": "036732bb-1d5b-4489-9151-d22fec88d0c7"
+    },
+    "scenario_d": {
+      "name": "Scenario D - Human Approval Policy Gate",
+      "live_status": "DETERMINISTIC VERIFIED (Policy Boundary)",
+      "deterministic_status": "PASS",
+      "workflow_id": "f0c8534d-84cb-40e5-9a57-3c9d283eef90"
+    },
+    "scenario_e": {
+      "name": "Scenario E - Human Approval Resumption",
+      "live_status": "DETERMINISTIC VERIFIED (Resumption Pipeline)",
+      "deterministic_status": "PASS",
+      "workflow_id": "df6bf318-4e9c-4555-8448-45f36332bb43"
+    },
+    "scenario_f": {
+      "name": "Scenario F - Deterministic Boundary Rejection",
+      "live_status": "DETERMINISTIC VERIFIED (Policy Boundary)",
+      "deterministic_status": "PASS",
+      "workflow_id": "277e2a81-fd0e-46f4-aa3f-99452e49cf2a"
+    }
+  }
+}

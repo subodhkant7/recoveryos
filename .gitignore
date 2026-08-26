@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Testing
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.next/
+
+# Firestore emulator
+firestore-debug.log
+firestore_export/
+ui-debug.log
+
+# Docker
+*.log

@@ -1,0 +1,15 @@
+services:
+  recoveryos-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - JWT_SECRET_KEY=recoveryos-production-secure-random-secret-key-32bytes
+      - CORS_ALLOW_ORIGINS=http://localhost:3000,http://localhost:8000
+      - PERSISTENCE_BACKEND=in_memory
+      - GEMINI_MODEL=gemini-3.5-flash
+      - GEMINI_MIN_INTERVAL_SECONDS=6.5
+    restart: unless-stopped

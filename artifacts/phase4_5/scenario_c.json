@@ -1,0 +1,11 @@
+{
+  "scenario": "Scenario C - Negative (No Valid Recovery)",
+  "runtime_model": "gemini-3.5-flash-lite",
+  "workflow_id": "036732bb-1d5b-4489-9151-d22fec88d0c7",
+  "timestamp": "2026-08-26T12:24:53.177797+00:00",
+  "live_status": "LIVE VERIFIED",
+  "deterministic_status": "PASS",
+  "error_detail": null,
+  "recovery_plans_created": 0,
+  "refusal_live_proven": true
+}

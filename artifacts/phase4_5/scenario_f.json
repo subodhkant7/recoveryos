@@ -1,0 +1,14 @@
+{
+  "scenario": "Scenario F - Deterministic Boundary Rejection",
+  "runtime_model": "gemini-3.5-flash-lite",
+  "workflow_id": "277e2a81-fd0e-46f4-aa3f-99452e49cf2a",
+  "timestamp": "2026-08-26T12:24:53.202488+00:00",
+  "live_status": "DETERMINISTIC VERIFIED (Policy Boundary)",
+  "deterministic_status": "PASS",
+  "submission_response": {
+    "status": "error",
+    "error_type": "VALIDATION_ERROR",
+    "message": "Proposed plan violates constraint: identity_first"
+  },
+  "external_billing_records": 0
+}

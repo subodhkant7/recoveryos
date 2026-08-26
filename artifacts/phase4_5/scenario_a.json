@@ -1,0 +1,13 @@
+{
+  "scenario": "Scenario A - Unique Dynamic Recovery",
+  "runtime_model": "gemini-3.5-flash-lite",
+  "workflow_id": "631ab1ba-2271-4ec5-b67a-33a080191a81",
+  "timestamp": "2026-08-26T12:23:34.195784+00:00",
+  "live_status": "LIVE VERIFIED",
+  "deterministic_status": "PASS",
+  "error_detail": null,
+  "recovery_plans_count": 1,
+  "selected_provider": "paypal",
+  "expected_provider": "paypal",
+  "recovery_plan_live_proven": true
+}
