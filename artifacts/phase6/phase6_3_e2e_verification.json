@@ -1,0 +1,218 @@
+{
+  "health": {
+    "status": "healthy",
+    "service": "recoveryos",
+    "timestamp": "2026-08-26T19:01:45.936741+00:00",
+    "model": "gemini-3.5-flash",
+    "environment": "production"
+  },
+  "ready": {
+    "status": "ready",
+    "service": "recoveryos",
+    "timestamp": "2026-08-26T19:01:46.105560+00:00",
+    "persistence_backend": "firestore"
+  },
+  "worker_private": true,
+  "dispatch": {
+    "status_code": 202,
+    "workflow_id": "69c3ac8e-78f6-4e22-957f-8ef078e6f9e6",
+    "pubsub_message_id": "20274763258786832",
+    "body": {
+      "status": "dispatched",
+      "workflow_id": "69c3ac8e-78f6-4e22-957f-8ef078e6f9e6",
+      "scenario": "billing_unavailable",
+      "tenant_id": "tenant-e2e-phase63",
+      "message": "Workflow dispatched asynchronously for background execution.",
+      "pubsub_message_id": "20274763258786832"
+    }
+  },
+  "state_transitions": [],
+  "final_workflow": null,
+  "operation_claim": {
+    "exists": false,
+    "data": null
+  },
+  "api_read_back": {
+    "workflow": {
+      "idempotency_key": "",
+      "state": "EXECUTING",
+      "workflow_id": "69c3ac8e-78f6-4e22-957f-8ef078e6f9e6",
+      "name": "ACME Corp Onboarding \u2014 billing_unavailable",
+      "completed_at": null,
+      "contract": {
+        "prohibited_outcomes": [
+          "double_charge",
+          "account_activated_without_billing",
+          "billing_configured_for_wrong_plan"
+        ],
+        "workflow_id": "69c3ac8e-78f6-4e22-957f-8ef078e6f9e6",
+        "required_outcomes": [
+          {
+            "evidence_ids": [],
+            "required_evidence": [
+              "verification_reference_id"
+            ],
+            "verified": false,
+            "acceptance_criteria": {
+              "id_type": "government",
+              "verification_level": "standard"
+            },
+            "description": "Customer identity confirmed against government records",
+            "outcome_id": "identity_verified",
+            "verification_method": "query_identity_service_by_customer_id"
+          },
+          {
+            "evidence_ids": [],
+            "required_evidence": [
+              "validation_reference_id"
+            ],
+            "verified": false,
+            "acceptance_criteria": {
+              "document_types": [
+                "incorporation",
+                "tax_id"
+              ]
+            },
+            "description": "Business registration documents validated",
+            "outcome_id": "documents_validated",
+            "verification_method": "query_document_service_by_submission_id"
+          },
+          {
+            "evidence_ids": [],
+            "required_evidence": [
+              "risk_score",
+              "assessment_id"
+            ],
+            "verified": false,
+            "acceptance_criteria": {
+              "max_risk_score": 75
+            },
+            "description": "Customer risk score computed and within acceptable range",
+            "outcome_id": "risk_assessed",
+            "verification_method": "query_risk_service_by_customer_id"
+          },
+          {
+            "evidence_ids": [],
+            "required_evidence": [
+              "subscription_id",
+              "provider",
+              "plan_tier"
+            ],
+            "verified": false,
+            "acceptance_criteria": {
+              "plan_tier": "enterprise",
+              "billing_cycle": "monthly"
+            },
+            "description": "Active billing subscription matching requested plan",
+            "outcome_id": "billing_configured",
+            "verification_method": "query_billing_service_for_active_subscription"
+          },
+          {
+            "evidence_ids": [],
+            "required_evidence": [
+              "account_id",
+              "activation_timestamp"
+            ],
+            "verified": false,
+            "acceptance_criteria": {
+              "status": "active"
+            },
+            "description": "Customer account is active and accessible",
+            "outcome_id": "account_activated",
+            "verification_method": "query_account_service_by_customer_id"
+          },
+          {
+            "evidence_ids": [],
+            "required_evidence": [
+              "message_id",
+              "delivery_timestamp"
+            ],
+            "verified": false,
+            "acceptance_criteria": {
+              "delivery_status": "delivered"
+            },
+            "description": "Welcome package delivered to customer",
+            "outcome_id": "welcome_sent",
+            "verification_method": "query_notification_service_by_message_id"
+          }
+        ],
+        "constraints": [
+          {
+            "constraint_id": "identity_first",
+            "description": "Identity must be verified before any other step",
+            "enforcement": "policy"
+          },
+          {
+            "constraint_id": "risk_before_billing",
+            "description": "Risk assessment must pass before billing is configured",
+            "enforcement": "policy"
+          },
+          {
+            "constraint_id": "single_billing_provider",
+            "description": "Customer must be billed through exactly one provider",
+            "enforcement": "verification"
+          }
+        ]
+      },
+      "recovery_attempts": 0,
+      "customer_data": {
+        "customer_id": "acme-001",
+        "requested_plan": "enterprise",
+        "full_name": "Alice Acme",
+        "email": "alice@acmecorp.com",
+        "company_name": "ACME Corp",
+        "preferred_billing_provider": "stripe",
+        "billing_cycle": "monthly"
+      },
+      "version": 2,
+      "max_recovery_attempts": 3,
+      "tenant_id": "tenant-e2e-phase63",
+      "scenario": "billing_unavailable",
+      "current_step_id": null,
+      "updated_at": "2026-08-26T19:01:51.620773+00:00",
+      "created_at": "2026-08-26T19:01:47.075831Z",
+      "resumed_at": null
+    },
+    "steps": [],
+    "events": [
+      {
+        "actor": "system",
+        "workflow_id": "69c3ac8e-78f6-4e22-957f-8ef078e6f9e6",
+        "event_type": "STATE_CHANGE",
+        "payload": {
+          "customer_data": {
+            "customer_id": "acme-001",
+            "billing_cycle": "monthly",
+            "full_name": "Alice Acme",
+            "email": "alice@acmecorp.com",
+            "company_name": "ACME Corp",
+            "preferred_billing_provider": "stripe",
+            "requested_plan": "enterprise"
+          },
+          "state": "CREATED"
+        },
+        "timestamp": "2026-08-26T19:01:48.176730Z",
+        "detail": "Workflow 'ACME Corp Onboarding \u2014 billing_unavailable' created for scenario 'billing_unavailable'",
+        "title": "Workflow Created",
+        "event_id": "70b3872a-bed2-47a9-9ae7-fa05f912323a"
+      },
+      {
+        "actor": "recoveryos-api",
+        "workflow_id": "69c3ac8e-78f6-4e22-957f-8ef078e6f9e6",
+        "event_type": "STATE_CHANGE",
+        "payload": {
+          "to_state": "EXECUTING",
+          "from_state": "CREATED"
+        },
+        "detail": "Asynchronous worker started execution via event 'WORKFLOW_DISPATCH'",
+        "timestamp": "2026-08-26T19:01:53.770006Z",
+        "title": "State: CREATED \u2192 EXECUTING",
+        "event_id": "e66042ec-c0ad-43da-89e1-bdec7190df34"
+      }
+    ],
+    "evidence": [],
+    "failures": [],
+    "recovery_plans": [],
+    "approvals": []
+  }
+}

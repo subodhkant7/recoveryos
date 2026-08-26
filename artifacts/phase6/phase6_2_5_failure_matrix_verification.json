@@ -1,0 +1,17 @@
+{
+  "FAIL-07_duplicate_delivery": {
+    "decision": "ACK",
+    "state_mutated_twice": false,
+    "verified": true
+  },
+  "FAIL-04_tenant_mismatch": {
+    "decision": "DEAD_LETTER",
+    "status_code": 422,
+    "verified": true
+  },
+  "FAIL-01_poison_pill": {
+    "decision": "DEAD_LETTER",
+    "status_code": 422,
+    "verified": true
+  }
+}

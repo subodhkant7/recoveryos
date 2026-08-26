@@ -48,4 +48,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=15s --timeout=5s --start-period=5s --retries=3 \
     CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=4)" || exit 1
 
-CMD ["uvicorn", "backend.api.server:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "exec uvicorn backend.api.server:app --host 0.0.0.0 --port ${PORT:-8000}"]

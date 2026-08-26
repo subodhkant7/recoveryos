@@ -9,7 +9,7 @@ import os
 from dataclasses import dataclass, field
 from dotenv import load_dotenv
 
-load_dotenv(override=True)
+load_dotenv(override=False)
 
 
 @dataclass(frozen=True)
@@ -31,6 +31,12 @@ class Config:
     firestore_emulator_host: str = field(
         default_factory=lambda: os.environ.get("FIRESTORE_EMULATOR_HOST", "")
     )
+    firestore_database: str = field(
+        default_factory=lambda: os.environ.get(
+            "FIRESTORE_DATABASE",
+            "recoveryosdb" if os.environ.get("ENVIRONMENT") == "production" else "(default)",
+        )
+    )
     google_cloud_project: str = field(
         default_factory=lambda: os.environ.get(
             "GOOGLE_CLOUD_PROJECT", "recoveryos-local"
@@ -40,6 +46,12 @@ class Config:
     # Pub/Sub
     pubsub_emulator_host: str = field(
         default_factory=lambda: os.environ.get("PUBSUB_EMULATOR_HOST", "")
+    )
+    event_publisher_backend: str = field(
+        default_factory=lambda: os.environ.get("EVENT_PUBLISHER_BACKEND", "in_memory")
+    )
+    pubsub_topic_workflow_execution: str = field(
+        default_factory=lambda: os.environ.get("PUBSUB_TOPIC", "recoveryos-workflow-execution")
     )
 
     # Server
@@ -133,6 +145,16 @@ class Config:
         if self.persistence_backend not in ("in_memory", "firestore"):
             raise ValueError(
                 f"Production configuration error: Unsupported PERSISTENCE_BACKEND '{self.persistence_backend}'."
+            )
+
+        if self.event_publisher_backend not in ("in_memory", "pubsub"):
+            raise ValueError(
+                f"Production configuration error: Unsupported EVENT_PUBLISHER_BACKEND '{self.event_publisher_backend}'."
+            )
+
+        if self.event_publisher_backend == "pubsub" and not self.google_cloud_project:
+            raise ValueError(
+                "Production configuration error: GOOGLE_CLOUD_PROJECT is required when EVENT_PUBLISHER_BACKEND is 'pubsub'."
             )
 
 

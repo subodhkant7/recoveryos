@@ -638,18 +638,27 @@ class FirestoreWorkflowStore(BaseWorkflowStore):
         self,
         project_id: str | None = None,
         emulator_host: str | None = None,
+        database: str | None = None,
+        credentials: Any | None = None,
     ) -> None:
         from google.cloud import firestore
 
         self._project_id = project_id or config.google_cloud_project or "recoveryos-local"
         self._emulator_host = emulator_host or config.firestore_emulator_host
+        self._database = database or config.firestore_database or "(default)"
+        self._credentials = credentials
         self._client: firestore.AsyncClient | None = None
         self._locks: dict[str, asyncio.Lock] = {}
 
     async def _get_client(self):
         if self._client is None:
             from google.cloud import firestore
-            self._client = firestore.AsyncClient(project=self._project_id)
+            kwargs: dict[str, Any] = {"project": self._project_id}
+            if self._database and self._database != "(default)":
+                kwargs["database"] = self._database
+            if self._credentials is not None:
+                kwargs["credentials"] = self._credentials
+            self._client = firestore.AsyncClient(**kwargs)
         return self._client
 
     def get_lock(self, key: str) -> asyncio.Lock:
@@ -1022,7 +1031,10 @@ def create_workflow_store(backend: str | None = None) -> BaseWorkflowStore:
     """Factory creating the appropriate BaseWorkflowStore instance."""
     selected = backend or config.persistence_backend
     if selected == "firestore" or (selected == "in_memory" and config.use_firestore_emulator and backend == "firestore"):
-        return FirestoreWorkflowStore()
+        return FirestoreWorkflowStore(
+            project_id=config.google_cloud_project,
+            database=config.firestore_database,
+        )
     return InMemoryWorkflowStore()
 
 

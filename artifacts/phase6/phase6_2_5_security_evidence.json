@@ -1,0 +1,17 @@
+{
+  "anonymous_rejection": {
+    "endpoint": "https://recoveryos-worker-321161003794.asia-east1.run.app/api/health",
+    "status_code": 403,
+    "verified": true
+  },
+  "cross_tenant_isolation": {
+    "status_code": 422,
+    "response": {
+      "status": "DEAD_LETTER",
+      "workflow_id": "wf-phase625-e2e-6008569c",
+      "message_id": "msg-evil-7e1d0f31",
+      "error": "Tenant mismatch: Workflow belongs to 'tenant-acme', message specifies 'tenant-evil-attacker'."
+    },
+    "verified": true
+  }
+}

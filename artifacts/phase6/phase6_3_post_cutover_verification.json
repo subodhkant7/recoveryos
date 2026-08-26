@@ -1,0 +1,201 @@
+{
+  "tenant_id": "tenant-prod-cutover-66296056",
+  "production_url": "https://recoveryos-321161003794.asia-east1.run.app",
+  "dispatch": {
+    "status_code": 202,
+    "workflow_id": "74436ebe-c1cf-4d90-8250-35dfa1c0b567",
+    "pubsub_message_id": "21444745455509067",
+    "response": {
+      "status": "dispatched",
+      "workflow_id": "74436ebe-c1cf-4d90-8250-35dfa1c0b567",
+      "scenario": "billing_unavailable",
+      "tenant_id": "tenant-prod-cutover-66296056",
+      "message": "Workflow dispatched asynchronously for background execution.",
+      "pubsub_message_id": "21444745455509067"
+    }
+  },
+  "final_snapshot": {
+    "workflow": {
+      "idempotency_key": "",
+      "state": "EXECUTING",
+      "workflow_id": "74436ebe-c1cf-4d90-8250-35dfa1c0b567",
+      "name": "ACME Corp Onboarding \u2014 billing_unavailable",
+      "completed_at": null,
+      "contract": {
+        "prohibited_outcomes": [
+          "double_charge",
+          "account_activated_without_billing",
+          "billing_configured_for_wrong_plan"
+        ],
+        "workflow_id": "74436ebe-c1cf-4d90-8250-35dfa1c0b567",
+        "required_outcomes": [
+          {
+            "evidence_ids": [],
+            "required_evidence": [
+              "verification_reference_id"
+            ],
+            "verified": false,
+            "acceptance_criteria": {
+              "id_type": "government",
+              "verification_level": "standard"
+            },
+            "description": "Customer identity confirmed against government records",
+            "outcome_id": "identity_verified",
+            "verification_method": "query_identity_service_by_customer_id"
+          },
+          {
+            "evidence_ids": [],
+            "required_evidence": [
+              "validation_reference_id"
+            ],
+            "verified": false,
+            "acceptance_criteria": {
+              "document_types": [
+                "incorporation",
+                "tax_id"
+              ]
+            },
+            "description": "Business registration documents validated",
+            "outcome_id": "documents_validated",
+            "verification_method": "query_document_service_by_submission_id"
+          },
+          {
+            "evidence_ids": [],
+            "required_evidence": [
+              "risk_score",
+              "assessment_id"
+            ],
+            "verified": false,
+            "acceptance_criteria": {
+              "max_risk_score": 75
+            },
+            "description": "Customer risk score computed and within acceptable range",
+            "outcome_id": "risk_assessed",
+            "verification_method": "query_risk_service_by_customer_id"
+          },
+          {
+            "evidence_ids": [],
+            "required_evidence": [
+              "subscription_id",
+              "provider",
+              "plan_tier"
+            ],
+            "verified": false,
+            "acceptance_criteria": {
+              "plan_tier": "enterprise",
+              "billing_cycle": "monthly"
+            },
+            "description": "Active billing subscription matching requested plan",
+            "outcome_id": "billing_configured",
+            "verification_method": "query_billing_service_for_active_subscription"
+          },
+          {
+            "evidence_ids": [],
+            "required_evidence": [
+              "account_id",
+              "activation_timestamp"
+            ],
+            "verified": false,
+            "acceptance_criteria": {
+              "status": "active"
+            },
+            "description": "Customer account is active and accessible",
+            "outcome_id": "account_activated",
+            "verification_method": "query_account_service_by_customer_id"
+          },
+          {
+            "evidence_ids": [],
+            "required_evidence": [
+              "message_id",
+              "delivery_timestamp"
+            ],
+            "verified": false,
+            "acceptance_criteria": {
+              "delivery_status": "delivered"
+            },
+            "description": "Welcome package delivered to customer",
+            "outcome_id": "welcome_sent",
+            "verification_method": "query_notification_service_by_message_id"
+          }
+        ],
+        "constraints": [
+          {
+            "constraint_id": "identity_first",
+            "description": "Identity must be verified before any other step",
+            "enforcement": "policy"
+          },
+          {
+            "constraint_id": "risk_before_billing",
+            "description": "Risk assessment must pass before billing is configured",
+            "enforcement": "policy"
+          },
+          {
+            "constraint_id": "single_billing_provider",
+            "description": "Customer must be billed through exactly one provider",
+            "enforcement": "verification"
+          }
+        ]
+      },
+      "recovery_attempts": 0,
+      "customer_data": {
+        "customer_id": "acme-001",
+        "requested_plan": "enterprise",
+        "full_name": "Alice Acme",
+        "email": "alice@acmecorp.com",
+        "company_name": "ACME Corp",
+        "preferred_billing_provider": "stripe",
+        "billing_cycle": "monthly"
+      },
+      "version": 2,
+      "max_recovery_attempts": 3,
+      "tenant_id": "tenant-prod-cutover-66296056",
+      "scenario": "billing_unavailable",
+      "current_step_id": null,
+      "updated_at": "2026-08-26T19:10:02.883425+00:00",
+      "created_at": "2026-08-26T19:09:59.480670Z",
+      "resumed_at": null
+    },
+    "steps": [],
+    "events": [
+      {
+        "actor": "system",
+        "workflow_id": "74436ebe-c1cf-4d90-8250-35dfa1c0b567",
+        "event_type": "STATE_CHANGE",
+        "payload": {
+          "customer_data": {
+            "customer_id": "acme-001",
+            "billing_cycle": "monthly",
+            "full_name": "Alice Acme",
+            "email": "alice@acmecorp.com",
+            "company_name": "ACME Corp",
+            "preferred_billing_provider": "stripe",
+            "requested_plan": "enterprise"
+          },
+          "state": "CREATED"
+        },
+        "timestamp": "2026-08-26T19:10:00.758010Z",
+        "detail": "Workflow 'ACME Corp Onboarding \u2014 billing_unavailable' created for scenario 'billing_unavailable'",
+        "title": "Workflow Created",
+        "event_id": "95715363-4365-49b2-880f-d0e00db57acd"
+      },
+      {
+        "actor": "recoveryos-api",
+        "workflow_id": "74436ebe-c1cf-4d90-8250-35dfa1c0b567",
+        "event_type": "STATE_CHANGE",
+        "payload": {
+          "to_state": "EXECUTING",
+          "from_state": "CREATED"
+        },
+        "detail": "Asynchronous worker started execution via event 'WORKFLOW_DISPATCH'",
+        "timestamp": "2026-08-26T19:10:03.576405Z",
+        "title": "State: CREATED \u2192 EXECUTING",
+        "event_id": "fcaebdf9-b16c-42b1-814d-40c2b92491cb"
+      }
+    ],
+    "evidence": [],
+    "failures": [],
+    "recovery_plans": [],
+    "approvals": []
+  },
+  "worker_log_sample": "[\n  {\n    \"insertId\": \"6a8f3a0d0003a0a1e193358b\",\n    \"labels\": {\n      \"instanceId\": \"00a41e8c1dee5de6409e15c5f2b257282014edb840acc0b5ef551a0b5733f50071757ef1af4f8cc3a138f6e575888b852f49493f562c04f9478023235ba4171081b675584ea8ee8b026dba4830cc89\"\n    },\n    \"logName\": \"projects/recoveryos-506713/logs/run.googleapis.com%2Fstdout\",\n    \"receiveTimestamp\": \"2026-08-26T19:10:05.350958038Z\",\n    \"resource\": {\n      \"labels\": {\n        \"configuration_name\": \"recoveryos-worker\",\n        \"location\": \"asia-east1\",\n        \"project_id\": \"recoveryos-506713\",\n        \"revision_name\": \"recoveryos-worker-00008-5pv\",\n        \"service_name\": \"recoveryos-worker\"\n      },\n      \"type\": \"cloud_run_revision\"\n    },\n    \"textPayload\": \"INFO:     169.254.169.126:35984 - \\\"POST / HTTP/1.1\\\" 200 OK\",\n    \"timestamp\": \"2026-08-26T19:10:05.237729Z\"\n  },\n  {\n    \"insertId\": \"6a8f38250003b6c0977151b0\",\n    \"labels\": {\n      \"instanceId\": \"00a41e8c1dee5de6409e15c5f2b257282014edb840acc0b5ef551a0b5733f50071757ef1af4f8cc3a138f6e575888b852f49493f562c04f9478023235ba4171081b675584ea8ee8b026dba4830cc89\"\n    },\n    \"logName\": \"projects/recoveryos-506713/logs/run.googleapis.com%2Fstdout\",\n    \"receiveTimestamp\": \"2026-08-26T19:01:57.426590093Z\",\n    \"resource\": {\n      \"labels\": {\n        \"configuration_name\": \"recoveryos-worker\",\n        \"location\": \"asia-east1\",\n        \"project_id\": \"recoveryos-506713\",\n        \"revision_name\": \"recoveryos-worker-00008-5pv\",\n        \"service_name\": \"recoveryos-worker\"\n      },\n      \"type\": \"cloud_run_revision\"\n    },\n    \"textPayload\": \"INFO:     169.254.169.126:33096 - \\\"POST / HTTP/1.1\\\" 200 OK\",\n    \"timestamp\": \"2026-08-26T19:01:57.243392Z\"\n  },\n  {\n    \"insertId\": \"6a8f37da000e0cd2fe47c0c2\",\n    \"labels\": {\n      \"instanceId\": \"00a41e8c1dee5de6409e15c5f2b257282014edb840acc0b5ef551a0b5733f50071757ef1af4f8cc3a138f6e575888b852f49493f562c04f9478023235ba4171081b675584ea8ee8b026dba4830cc89\"\n    },\n    \"logName\": \"projects/recoveryos-506713/logs/run.googleapis.com%2Fstdout\",\n    \"receiveTimestamp\": \"2026-08-26T19:00:42.977893899Z\",\n    \"resource\": {\n      \"labels\": {\n        \"configuration_name\": \"recoveryos-worker\",\n        \"location\": \"asia-east1\",\n        \"project_id\": \"recoveryos-506713\",\n        \"revision_name\": \"recoveryos-worker-00008-5pv\",\n        \"service_name\": \"recoveryos-worker\"\n      },\n      \"type\": \"cloud_run_revision\"\n    },\n    \"textPayload\": \"INFO:     169.254.169.126:41298 - \\\"POST / HTTP/1.1\\\" 200 OK\",\n    \"timestamp\": \"2026-08-26T19:00:42.920786Z\"\n  },\n  {\n    \"insertId\": \"6a8f369a000e8d71c32dee84\",\n    \"labels\": {\n      \"instanceId\": \"00a41e8c1dee5de6409e15c5f2b257282014edb840acc0b5ef551a0b5733f50071757ef1af4f8cc3a138f6e575888b852f49493f562c04f9478023235ba4171081b675584ea8ee8b026dba4830cc89\"\n    },\n    \"logName\": \"projects/recoveryos-506713/logs/run.googleapis.com%2Fstdout\",\n    \"receiveTimestamp\": \"2026-08-26T18:55:23.029239350Z\",\n    \"resource\": {\n      \"labels\": {\n        \"configuration_name\": \"recoveryos-worker\",\n        \"location\": \"asia-east1\",\n        \"project_id\": \"recoveryos-506713\",\n        \"revision_name\": \"recoveryos-worker-00008-5pv\",\n        \"service_name\": \"recoveryos-worker\"\n      },\n      \"type\": \"cloud_run_revision\"\n    },\n    \"textPayload\": \"INFO:     169.254.169.126:58034 - \\\"POST / HTTP/1.1\\\" 422 Unprocessable Content\",\n    \"timestamp\": \"2026-08-26T18:55:22.953713Z\"\n  },\n  {\n    \"insertId\": \"6a8f3699000ec1372a6c74c3\",\n    \"labels\": {\n      \"instanceId\": \"00a41e8c1dee5de6409e15c5f2b257282014edb840acc0b5ef551a0b5733f50071757ef1af4f8cc3a138f6e575888b852f49493f562c04f9478023235ba4171081b675584ea8ee8b026dba4830cc89\"\n    },\n    \"logName\": \"projects/recoveryos-506713/logs/run.googleapis.com%2Fstdout\",\n    \"receiveTimestamp\": \"2026-08-26T18:55:22.028659168Z\",\n    \"resource\": {\n      \"labels\": {\n        \"configuration_name\": \"recoveryos-worker\",\n        \"location\": \"asia-east1\",\n        \"project_id\": \"recoveryos-506713\",\n        \"revision_name\": \"recoveryos-worker-00008-5pv\",\n        \"service_name\": \"recoveryos-worker\"\n      },\n      \"type\": \"cloud_run_revision\"\n    },\n    \"textPayload\": \"INFO:     169.254.169.126:26318 - \\\"POST / HTTP/1.1\\\" 422 Unprocessable Content\",\n    \"timestamp\": \"2026-08-26T18:55:21.966967Z\"\n  }\n]\n"
+}

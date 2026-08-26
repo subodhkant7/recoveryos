@@ -25,8 +25,8 @@ current_tenant_id: contextvars.ContextVar[str] = contextvars.ContextVar("current
 SENSITIVE_KEY_PATTERNS = re.compile(
     r"(?i)(token|jwt|auth|secret|password|key|api_key|private|credential|bearer|access_token|refresh_token)"
 )
-JWT_PATTERN = re.compile(r"eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}")
-API_KEY_PATTERN = re.compile(r"AIza[0-9A-Za-z-_]{20,}")
+JWT_PATTERN = re.compile(r"eyJ[a-zA-Z0-9_.-]{10,}")
+API_KEY_PATTERN = re.compile(r"AIza[0-9A-Za-z-_.]+")
 
 
 def redact_sensitive_data(val: Any) -> Any:

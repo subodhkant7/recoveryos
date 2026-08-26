@@ -1,0 +1,49 @@
+{
+  "phase": "6.1",
+  "deployment_target": "Google Cloud Run",
+  "status": "PASS",
+  "timestamp": "2026-08-26T16:15:00Z",
+  "gcp_details": {
+    "project_id": "recoveryos-506713",
+    "project_number": "321161003794",
+    "region": "asia-east1",
+    "service_name": "recoveryos",
+    "active_revision": "recoveryos-00004-sw7",
+    "service_url": "https://recoveryos-321161003794.asia-east1.run.app",
+    "service_account": "recoveryos-runtime@recoveryos-506713.iam.gserviceaccount.com",
+    "image_uri": "asia-east1-docker.pkg.dev/recoveryos-506713/recoveryos/recoveryos:phase6-1",
+    "image_digest": "sha256:9f1b1beffe0e6a1b974f8f88c74dbfc52fc41bbb5d507a3677d91932784ee1ea",
+    "container_port": 8000,
+    "iam_unauthenticated_allowed": false,
+    "max_instances": 1,
+    "min_instances": 1,
+    "persistence_backend": "firestore"
+  },
+  "root_causes_resolved": [
+    {
+      "issue": "Architecture binary mismatch (exec format error on uvicorn)",
+      "fix": "Compiled native linux/amd64 container image via Cloud Build."
+    },
+    {
+      "issue": "Hardcoded port in Dockerfile CMD prevented dynamic $PORT binding",
+      "fix": "Changed CMD to ['sh', '-c', 'exec uvicorn backend.api.server:app --host 0.0.0.0 --port ${PORT:-8000}']"
+    },
+    {
+      "issue": "Fail-closed production config threw on missing JWT_SECRET_KEY, CORS_ALLOW_ORIGINS, GEMINI_API_KEY",
+      "fix": "Mounted Secret Manager secrets recoveryos-jwt-secret and recoveryos-gemini-key, set CORS_ALLOW_ORIGINS."
+    }
+  ],
+  "verification_probes": {
+    "unauthenticated_request_status": 403,
+    "health_liveness_status": 200,
+    "readiness_status": 200,
+    "metrics_status": 200,
+    "firestore_connectivity": "READY"
+  },
+  "regression_tests": {
+    "deterministic_tests_total": 139,
+    "deterministic_tests_passed": 139,
+    "deterministic_tests_failed": 0,
+    "deterministic_tests_skipped": 0
+  }
+}

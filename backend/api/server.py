@@ -9,20 +9,21 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Response, Security, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from backend.config import config
 from backend.agents.agent_factory import AgentFactory
 from backend.engine.policy_engine import PolicyEngine
 from backend.engine.workflow_engine import WorkflowEngine
-from backend.persistence.workflow_store import WorkflowStore
+from backend.persistence.workflow_store import create_workflow_store, BaseWorkflowStore
 from backend.simulation.external_services import SimulatedServices
 from backend.simulation.failure_injector import FailureInjector
 from backend.simulation.scenarios import (
@@ -32,12 +33,22 @@ from backend.simulation.scenarios import (
 )
 from backend.models.workflow import WorkflowState
 from backend.models.events import EventType
+from backend.events import (
+    BaseEventPublisher,
+    EventPublishError,
+    WorkflowEventType,
+    WorkflowExecutionMessage,
+    create_event_publisher,
+)
 from backend.security.principal import Principal, Role, Permission
 from backend.security.dependencies import get_current_principal, require_role, require_permission
 from backend.security.audit import record_security_audit_event
+from backend.observability.logging import current_request_id
 from backend.observability.metrics import metrics
 from backend.observability.middleware import CorrelationAndMetricsMiddleware
 from backend.lifecycle import lifespan, shutdown_manager
+
+logger = logging.getLogger("recoveryos.api.server")
 
 # ---------------------------------------------------------------------------
 # Application Setup
@@ -66,10 +77,24 @@ app.add_middleware(
 # Shared state (singleton instances)
 failure_injector = FailureInjector()
 services = SimulatedServices(failure_injector)
-store = WorkflowStore()
+store: BaseWorkflowStore = create_workflow_store(config.persistence_backend)
 engine = WorkflowEngine(store)
 policy_engine = PolicyEngine()
 agent_factory = AgentFactory(store, engine, services, policy_engine)
+
+_event_publisher: BaseEventPublisher | None = None
+
+
+def get_event_publisher() -> BaseEventPublisher:
+    global _event_publisher
+    if _event_publisher is None:
+        _event_publisher = create_event_publisher(config.event_publisher_backend)
+    return _event_publisher
+
+
+def set_event_publisher(publisher: BaseEventPublisher | None) -> None:
+    global _event_publisher
+    _event_publisher = publisher
 
 
 # ---------------------------------------------------------------------------
@@ -206,10 +231,6 @@ async def launch_scenario(
     # Configure failure injection
     configure_demo_scenario(failure_injector, workflow_id, scenario_name)
 
-    # Start agent execution in background with shutdown manager tracking
-    task = asyncio.create_task(_run_agent(workflow_id))
-    shutdown_manager.register_task(task)
-
     record_security_audit_event(
         event_type="PRIVILEGED_MUTATION",
         actor_id=principal.user_id,
@@ -221,13 +242,63 @@ async def launch_scenario(
         reason=f"Launched scenario {scenario_name}",
     )
 
-    return {
-        "status": "launched",
-        "workflow_id": workflow_id,
-        "scenario": scenario_name,
-        "tenant_id": principal.tenant_id,
-        "message": "Workflow started. Agent executing autonomously in background.",
-    }
+    if config.event_publisher_backend == "pubsub":
+        publisher = get_event_publisher()
+        corr_id = current_request_id.get() or str(uuid.uuid4())
+        workflow_ver = wf_data.get("version", 1)
+        idemp_key = f"op_dispatch_{workflow_id}_v{workflow_ver}"
+
+        msg = WorkflowExecutionMessage(
+            event_type=WorkflowEventType.WORKFLOW_DISPATCH,
+            workflow_id=workflow_id,
+            tenant_id=principal.tenant_id,
+            idempotency_key=idemp_key,
+            expected_version=workflow_ver,
+            correlation_id=corr_id,
+            producer_id="recoveryos-api",
+            payload={"scenario": scenario_name},
+        )
+
+        try:
+            pubsub_msg_id = await publisher.publish_workflow_execution(msg)
+        except Exception as e:
+            logger.error(
+                "Failed to dispatch workflow execution to Pub/Sub",
+                extra={
+                    "event_name": "API_DISPATCH_FAILED",
+                    "workflow_id": workflow_id,
+                    "tenant_id": principal.tenant_id,
+                    "error": str(e),
+                },
+            )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Failed to dispatch workflow execution to messaging backend: {e}",
+            )
+
+        return JSONResponse(
+            status_code=status.HTTP_202_ACCEPTED,
+            content={
+                "status": "dispatched",
+                "workflow_id": workflow_id,
+                "scenario": scenario_name,
+                "tenant_id": principal.tenant_id,
+                "message": "Workflow dispatched asynchronously for background execution.",
+                "pubsub_message_id": pubsub_msg_id,
+            },
+        )
+    else:
+        # Start agent execution in background with shutdown manager tracking for local in-process mode
+        task = asyncio.create_task(_run_agent(workflow_id))
+        shutdown_manager.register_task(task)
+
+        return {
+            "status": "launched",
+            "workflow_id": workflow_id,
+            "scenario": scenario_name,
+            "tenant_id": principal.tenant_id,
+            "message": "Workflow started. Agent executing autonomously in background.",
+        }
 
 
 @app.get("/api/workflows")
@@ -404,16 +475,60 @@ async def approve_workflow(
         actor="human",
     )
 
-    # 6. Transition workflow
+    # 6. Transition workflow / dispatch execution
     if request.approved:
-        await engine.transition(
-            workflow_id,
-            WorkflowState.EXECUTING,
-            detail="Human approved recovery plan",
-            actor="human",
-        )
-        task = asyncio.create_task(_run_agent(workflow_id))
-        shutdown_manager.register_task(task)
+        if config.event_publisher_backend == "pubsub":
+            publisher = get_event_publisher()
+            corr_id = current_request_id.get() or str(uuid.uuid4())
+            latest_wf = await store.get_workflow(workflow_id)
+            current_ver = latest_wf.get("version", 1) if latest_wf else 1
+            idemp_key = f"op_approve_{workflow_id}_{approval_id}_v{current_ver}"
+
+            msg = WorkflowExecutionMessage(
+                event_type=WorkflowEventType.APPROVAL_RESUME,
+                workflow_id=workflow_id,
+                tenant_id=actual_principal.tenant_id,
+                idempotency_key=idemp_key,
+                expected_version=current_ver,
+                correlation_id=corr_id,
+                producer_id="recoveryos-api",
+                payload={"approval_id": approval_id, "approved": True},
+            )
+
+            try:
+                pubsub_msg_id = await publisher.publish_workflow_execution(msg)
+            except Exception as e:
+                logger.error(
+                    "Failed to dispatch approval resume to Pub/Sub",
+                    extra={
+                        "event_name": "API_APPROVAL_DISPATCH_FAILED",
+                        "workflow_id": workflow_id,
+                        "approval_id": approval_id,
+                        "error": str(e),
+                    },
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=f"Failed to dispatch approval execution to messaging backend: {e}",
+                )
+
+            return {
+                "status": "decided",
+                "approved": True,
+                "decided_by": actual_principal.user_id,
+                "dispatched": True,
+                "pubsub_message_id": pubsub_msg_id,
+            }
+        else:
+            await engine.transition(
+                workflow_id,
+                WorkflowState.EXECUTING,
+                detail="Human approved recovery plan",
+                actor="human",
+            )
+            task = asyncio.create_task(_run_agent(workflow_id))
+            shutdown_manager.register_task(task)
+            return {"status": "decided", "approved": True, "decided_by": actual_principal.user_id}
     else:
         await engine.transition(
             workflow_id,
@@ -421,8 +536,7 @@ async def approve_workflow(
             detail=f"Human rejected: {request.reason}",
             actor="human",
         )
-
-    return {"status": "decided", "approved": request.approved, "decided_by": actual_principal.user_id}
+        return {"status": "decided", "approved": False, "decided_by": actual_principal.user_id}
 
 
 # ---------------------------------------------------------------------------

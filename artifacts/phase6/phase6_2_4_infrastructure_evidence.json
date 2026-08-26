@@ -1,0 +1,90 @@
+{
+  "phase": "6.2.4",
+  "status": "PASS",
+  "timestamp": "2026-08-26T16:52:00Z",
+  "project_id": "recoveryos-506713",
+  "project_number": "321161003794",
+  "region": "asia-east1",
+  "pubsub_resources": {
+    "primary_topic": {
+      "name": "projects/recoveryos-506713/topics/recoveryos-workflow-execution",
+      "status": "PROVISIONED"
+    },
+    "dead_letter_topic": {
+      "name": "projects/recoveryos-506713/topics/recoveryos-workflow-execution-dlq",
+      "status": "PROVISIONED"
+    },
+    "worker_subscription": {
+      "name": "projects/recoveryos-506713/subscriptions/recoveryos-workflow-execution-worker",
+      "topic": "projects/recoveryos-506713/topics/recoveryos-workflow-execution",
+      "ack_deadline_seconds": 60,
+      "dead_letter_topic": "projects/recoveryos-506713/topics/recoveryos-workflow-execution-dlq",
+      "max_delivery_attempts": 5,
+      "state": "ACTIVE"
+    },
+    "dlq_subscription": {
+      "name": "projects/recoveryos-506713/subscriptions/recoveryos-workflow-execution-dlq-sub",
+      "topic": "projects/recoveryos-506713/topics/recoveryos-workflow-execution-dlq",
+      "ack_deadline_seconds": 60,
+      "state": "ACTIVE"
+    }
+  },
+  "cloud_tasks_resources": {
+    "queue_name": "projects/recoveryos-506713/locations/asia-east1/queues/recoveryos-gemini-queue",
+    "location": "asia-east1",
+    "rate_limits": {
+      "max_dispatches_per_second": 0.25,
+      "max_concurrent_dispatches": 1,
+      "max_burst_size": 10
+    },
+    "retry_config": {
+      "max_attempts": 5,
+      "max_backoff": "3600s",
+      "min_backoff": "0.100s"
+    },
+    "state": "RUNNING"
+  },
+  "iam_bindings": [
+    {
+      "resource": "projects/recoveryos-506713/topics/recoveryos-workflow-execution-dlq",
+      "member": "serviceAccount:service-321161003794@gcp-sa-pubsub.iam.gserviceaccount.com",
+      "role": "roles/pubsub.publisher"
+    },
+    {
+      "resource": "projects/recoveryos-506713/subscriptions/recoveryos-workflow-execution-worker",
+      "member": "serviceAccount:service-321161003794@gcp-sa-pubsub.iam.gserviceaccount.com",
+      "role": "roles/pubsub.subscriber"
+    }
+  ],
+  "live_delivery_verification": {
+    "published_message_id": "21084424840618722",
+    "subscription_pulled": "projects/recoveryos-506713/subscriptions/recoveryos-workflow-execution-worker",
+    "ack_status": "SUCCESS",
+    "delivery_attempt": 1
+  },
+  "tests": {
+    "new_infrastructure_tests": {
+      "file": "tests/test_pubsub_infrastructure_contract.py",
+      "total": 10,
+      "passed": 10,
+      "failed": 0
+    },
+    "full_regression_battery": {
+      "total_test_files": 22,
+      "total_tests": 209,
+      "passed": 209,
+      "failed": 0,
+      "skipped": 0,
+      "execution_time_seconds": 18.41
+    }
+  },
+  "production_safety_check": {
+    "service_name": "recoveryos",
+    "region": "asia-east1",
+    "latest_ready_revision": "recoveryos-00004-sw7",
+    "status_ready": true,
+    "traffic_percentage": 100,
+    "production_outage": false
+  },
+  "phase_6_2_5_authorization": "BLOCKED — Awaiting explicit user authorization."
+}

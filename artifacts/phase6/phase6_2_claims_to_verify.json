@@ -1,0 +1,63 @@
+{
+  "phase": "6.2",
+  "plan_type": "Distributed Asynchronous Execution Claims & Test Requirements",
+  "timestamp": "2026-08-26T16:35:00Z",
+  "claims_to_verify": [
+    {
+      "claim_id": "CLAIM-01",
+      "claim": "Decoupled Asynchronous Ingestion & Sub-50ms API Response",
+      "verification_method": "API returns 202 Accepted within 50ms upon publishing event to Pub/Sub topic.",
+      "environment_required": "Local Pub/Sub Emulator & Live Cloud Run",
+      "test_name": "test_api_async_dispatch_sub_50ms"
+    },
+    {
+      "claim_id": "CLAIM-02",
+      "claim": "At-Least-Once Pub/Sub Redelivery Preserves Exactly-Once Effects",
+      "verification_method": "Delivering identical message multiple times results in exactly one external mutation via OperationClaim lease and idempotency cache.",
+      "environment_required": "Local Emulator & Live GCP Pub/Sub",
+      "test_name": "test_pubsub_duplicate_delivery_single_mutation"
+    },
+    {
+      "claim_id": "CLAIM-03",
+      "claim": "Firestore Transactional OCC Rejects Stale Concurrent Worker Writes",
+      "verification_method": "Concurrent workers attempting parallel updates on the same workflow version trigger StaleWorkflowStateError without state corruption.",
+      "environment_required": "Local Firestore Emulator & Live GCP Firestore",
+      "test_name": "test_concurrent_worker_occ_conflict"
+    },
+    {
+      "claim_id": "CLAIM-04",
+      "claim": "Dead-Letter Forwarding & Alerting after 5 Failed Retries",
+      "verification_method": "Unrecoverable poison message is routed to recoveryos-workflow-deadletter after 5 delivery attempts and marked ESCALATED.",
+      "environment_required": "Local Emulator & Live GCP Pub/Sub",
+      "test_name": "test_deadletter_forwarding_on_exhaustion"
+    },
+    {
+      "claim_id": "CLAIM-05",
+      "claim": "Distributed Multi-Replica Gemini Quota Rate Limiting (<= 15 RPM)",
+      "verification_method": "Multiple worker tasks dispatching concurrent LLM calls comply with <= 15 RPM aggregate rate via Cloud Tasks dispatch pacing and Firestore token window.",
+      "environment_required": "Local Unit Tests & Live GCP Cloud Tasks",
+      "test_name": "test_distributed_gemini_quota_pacing"
+    },
+    {
+      "claim_id": "CLAIM-06",
+      "claim": "Graceful Worker Shutdown & Task Draining under SIGTERM",
+      "verification_method": "Worker receives SIGTERM, stops accepting new messages, and drains active agent turns within 5 seconds.",
+      "environment_required": "Local Docker & Cloud Run Revision Rotation",
+      "test_name": "test_worker_sigterm_task_draining"
+    },
+    {
+      "claim_id": "CLAIM-07",
+      "claim": "Distributed Tracing & Context Propagation",
+      "verification_method": "Correlation ID and traceparent propagate across API -> Pub/Sub -> Worker -> Gemini -> Firestore logs.",
+      "environment_required": "Local Unit & Live Cloud Logging",
+      "test_name": "test_distributed_tracing_propagation"
+    },
+    {
+      "claim_id": "CLAIM-08",
+      "claim": "Tenant Isolation Maintained in Asynchronous Worker Execution",
+      "verification_method": "Worker enforces tenant isolation on asynchronous message consumption, preventing cross-tenant data leaks.",
+      "environment_required": "Local Unit & Live Cloud Run",
+      "test_name": "test_async_worker_tenant_isolation"
+    }
+  ]
+}
