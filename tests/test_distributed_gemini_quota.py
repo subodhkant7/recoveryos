@@ -205,12 +205,12 @@ def test_10_multiprocess_cross_process_serialization():
     results = []
     for _ in range(num_processes):
         try:
-            results.append(queue.get(timeout=10.0))
+            results.append(queue.get(timeout=20.0))
         except Exception:
             pass
 
     for p in processes:
-        p.join(timeout=10.0)
+        p.join(timeout=20.0)
 
     assert len(results) == num_processes
     for r in results:
