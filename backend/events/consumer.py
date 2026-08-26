@@ -28,6 +28,17 @@ from backend.observability.logging import (
     current_request_id,
     current_workflow_id,
     current_tenant_id,
+    EVENT_WORKFLOW_CONSUMED,
+    EVENT_WORKFLOW_CLAIMED,
+    EVENT_WORKFLOW_DUPLICATE,
+    EVENT_WORKFLOW_OCC_MISMATCH,
+    EVENT_WORKFLOW_TERMINAL_SKIP,
+    EVENT_WORKFLOW_EXECUTION_STARTED,
+    EVENT_WORKFLOW_EXECUTION_COMPLETED,
+)
+from backend.observability.metrics import (
+    record_occ_mismatch,
+    record_duplicate_claim,
 )
 
 
@@ -35,7 +46,7 @@ logger = logging.getLogger("recoveryos.events.consumer")
 
 
 class ConsumerExecutionError(Exception):
-    """Raised when an asynchronous event execution fails."""
+    """Raised when a non-retryable operational violation occurs (e.g. tenant mismatch, missing workflow)."""
     pass
 
 
@@ -77,7 +88,7 @@ class WorkflowEventConsumer:
         logger.info(
             "Consuming workflow execution message",
             extra={
-                "event_name": "EVENT_CONSUMING",
+                "event_name": EVENT_WORKFLOW_CONSUMED,
                 "message_id": message.message_id,
                 "event_type": message.event_type.value,
                 "workflow_id": message.workflow_id,
@@ -130,7 +141,7 @@ class WorkflowEventConsumer:
             logger.info(
                 "Dropping message targeting terminal workflow",
                 extra={
-                    "event_name": "EVENT_TERMINAL_DROPPED",
+                    "event_name": EVENT_WORKFLOW_TERMINAL_SKIP,
                     "workflow_id": message.workflow_id,
                     "state": current_state,
                     "message_id": message.message_id,
@@ -158,10 +169,11 @@ class WorkflowEventConsumer:
 
         if not claim_acquired:
             claim_status = claim_record.get("status") if claim_record else "UNKNOWN"
+            record_duplicate_claim()
             logger.info(
                 "Duplicate/Active message claim detected; reusing existing execution",
                 extra={
-                    "event_name": "EVENT_DUPLICATE_CLAIMED",
+                    "event_name": EVENT_WORKFLOW_DUPLICATE,
                     "idempotency_key": message.idempotency_key,
                     "claim_status": claim_status,
                     "message_id": message.message_id,
@@ -174,6 +186,16 @@ class WorkflowEventConsumer:
                 "message_id": message.message_id,
             }
 
+        logger.info(
+            "Operation claim acquired by worker",
+            extra={
+                "event_name": EVENT_WORKFLOW_CLAIMED,
+                "workflow_id": message.workflow_id,
+                "idempotency_key": message.idempotency_key,
+                "worker_id": self._worker_id,
+            },
+        )
+
         # Optional test hook after claim
         if self._test_failure_hook:
             self._test_failure_hook("after_claim", message)
@@ -183,10 +205,11 @@ class WorkflowEventConsumer:
         # ------------------------------------------------------------------
         current_version = wf.get("version", 1)
         if current_version != message.expected_version:
+            record_occ_mismatch()
             logger.warning(
                 "OCC Version mismatch on event consumption",
                 extra={
-                    "event_name": "EVENT_OCC_MISMATCH",
+                    "event_name": EVENT_WORKFLOW_OCC_MISMATCH,
                     "workflow_id": message.workflow_id,
                     "current_version": current_version,
                     "expected_version": message.expected_version,
@@ -200,8 +223,20 @@ class WorkflowEventConsumer:
         # ------------------------------------------------------------------
         # 5. Delegate to Workflow Engine State Machine
         # ------------------------------------------------------------------
-        if message.event_type in (WorkflowEventType.WORKFLOW_DISPATCH, WorkflowEventType.APPROVAL_RESUME):
+        if message.event_type in (
+            WorkflowEventType.WORKFLOW_DISPATCH,
+            WorkflowEventType.APPROVAL_RESUME,
+            WorkflowEventType.RECOVERY_TRIGGER,
+        ):
             if current_state != WorkflowState.EXECUTING.value:
+                logger.info(
+                    "Transitioning workflow state to EXECUTING",
+                    extra={
+                        "event_name": EVENT_WORKFLOW_EXECUTION_STARTED,
+                        "workflow_id": message.workflow_id,
+                        "previous_state": current_state,
+                    },
+                )
                 await self._engine.transition(
                     workflow_id=message.workflow_id,
                     new_state=WorkflowState.EXECUTING,

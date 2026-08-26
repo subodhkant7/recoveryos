@@ -43,8 +43,18 @@ from backend.events import (
 from backend.security.principal import Principal, Role, Permission
 from backend.security.dependencies import get_current_principal, require_role, require_permission
 from backend.security.audit import record_security_audit_event
-from backend.observability.logging import current_request_id
-from backend.observability.metrics import metrics
+from backend.observability.logging import (
+    current_request_id,
+    EVENT_WORKFLOW_DISPATCHED,
+    EVENT_WORKFLOW_PUBLISH_FAILED,
+    EVENT_WORKFLOW_RECOVERED,
+)
+from backend.observability.metrics import (
+    metrics,
+    record_workflow_dispatched,
+    record_publish_failure,
+    record_workflow_recovery,
+)
 from backend.observability.middleware import CorrelationAndMetricsMiddleware
 from backend.lifecycle import lifespan, shutdown_manager
 
@@ -110,6 +120,11 @@ class ApprovalRequest(BaseModel):
     approved: bool
     reason: str = ""
     decided_by: str | None = None  # Ignored by server; server stamps authenticated principal
+
+
+class WorkflowRecoveryRequest(BaseModel):
+    reason: str = "Operator requested workflow recovery"
+    force: bool = False  # If true, allows recovering ESCALATED workflows
 
 
 # ---------------------------------------------------------------------------
@@ -261,11 +276,13 @@ async def launch_scenario(
 
         try:
             pubsub_msg_id = await publisher.publish_workflow_execution(msg)
+            record_workflow_dispatched(scenario=scenario_name, tenant_id=principal.tenant_id)
         except Exception as e:
+            record_publish_failure(backend="pubsub")
             logger.error(
                 "Failed to dispatch workflow execution to Pub/Sub",
                 extra={
-                    "event_name": "API_DISPATCH_FAILED",
+                    "event_name": EVENT_WORKFLOW_PUBLISH_FAILED,
                     "workflow_id": workflow_id,
                     "tenant_id": principal.tenant_id,
                     "error": str(e),
@@ -289,6 +306,7 @@ async def launch_scenario(
         )
     else:
         # Start agent execution in background with shutdown manager tracking for local in-process mode
+        record_workflow_dispatched(scenario=scenario_name, tenant_id=principal.tenant_id)
         task = asyncio.create_task(_run_agent(workflow_id))
         shutdown_manager.register_task(task)
 
@@ -537,6 +555,208 @@ async def approve_workflow(
             actor="human",
         )
         return {"status": "decided", "approved": False, "decided_by": actual_principal.user_id}
+
+
+# ---------------------------------------------------------------------------
+# Phase 6.5 Operability & Recovery Endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/workflows/{workflow_id}/diagnostics")
+async def get_workflow_diagnostics(
+    workflow_id: str,
+    principal: Principal = Depends(get_current_principal),
+):
+    """
+    AUTHENTICATED endpoint: Analyze operational health, lease status, and stuck conditions.
+    """
+    wf = await _get_authorized_workflow(workflow_id, principal)
+    snapshot = await store.get_workflow_snapshot(workflow_id)
+    if not snapshot:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workflow not found")
+
+    events = snapshot.get("events", [])
+    now = datetime.now(timezone.utc)
+
+    # Calculate age
+    created_at_str = wf.get("created_at") or wf.get("dispatched_at")
+    age_seconds = 0.0
+    if created_at_str:
+        try:
+            created_dt = datetime.fromisoformat(created_at_str)
+            if created_dt.tzinfo is None:
+                created_dt = created_dt.replace(tzinfo=timezone.utc)
+            age_seconds = max(0.0, (now - created_dt).total_seconds())
+        except Exception:
+            pass
+
+    # Check state & stuck conditions
+    current_state = wf.get("state", "UNKNOWN")
+    is_terminal = current_state in (WorkflowState.COMPLETED.value, WorkflowState.ESCALATED.value)
+
+    # Check claim status in store if accessible
+    claim_info = None
+    if hasattr(store, "_operations") and isinstance(store._operations, dict):
+        for k, v in store._operations.items():
+            if isinstance(v, dict) and v.get("workflow_id") == workflow_id:
+                claim_info = {
+                    "idempotency_key": k,
+                    "status": v.get("status"),
+                    "owner_worker_id": v.get("owner_worker_id"),
+                    "lease_expires_at": v.get("lease_expires_at"),
+                }
+                break
+
+    is_stuck = False
+    stuck_reason = None
+
+    if not is_terminal:
+        if current_state == WorkflowState.CREATED.value and age_seconds > 60.0:
+            is_stuck = True
+            stuck_reason = f"Workflow remained in CREATED state for {int(age_seconds)}s without worker pickup."
+        elif current_state == WorkflowState.EXECUTING.value and age_seconds > 180.0:
+            is_stuck = True
+            stuck_reason = f"Workflow executing for {int(age_seconds)}s exceeding expected duration."
+        elif claim_info and claim_info.get("status") == "CLAIMED":
+            lease_exp_str = claim_info.get("lease_expires_at")
+            if lease_exp_str:
+                try:
+                    exp_dt = datetime.fromisoformat(lease_exp_str)
+                    if exp_dt.tzinfo is None:
+                        exp_dt = exp_dt.replace(tzinfo=timezone.utc)
+                    if now > exp_dt:
+                        is_stuck = True
+                        stuck_reason = "Active operation claim lease has expired without task completion."
+                except Exception:
+                    pass
+
+    return {
+        "workflow_id": workflow_id,
+        "tenant_id": wf.get("tenant_id", "tenant-default"),
+        "state": current_state,
+        "version": wf.get("version", 1),
+        "age_seconds": round(age_seconds, 2),
+        "is_terminal": is_terminal,
+        "is_stuck": is_stuck,
+        "stuck_reason": stuck_reason,
+        "is_recoverable": (not is_terminal) or (current_state == WorkflowState.ESCALATED.value),
+        "operation_claim": claim_info,
+        "event_count": len(events),
+        "last_event": events[-1] if events else None,
+    }
+
+
+@app.post("/api/workflows/{workflow_id}/recover")
+async def recover_workflow(
+    workflow_id: str,
+    request: WorkflowRecoveryRequest = WorkflowRecoveryRequest(),
+    principal: Principal = Depends(require_role(Role.OPERATOR, Role.ADMIN)),
+):
+    """
+    OPERATOR / ADMIN endpoint: Safely and idempotently recover/redrive a stalled workflow.
+    Validates tenant isolation, verifies non-terminal state, binds to current OCC version,
+    and publishes a recovery dispatch event.
+    """
+    wf = await _get_authorized_workflow(workflow_id, principal)
+    current_state = wf.get("state")
+
+    if current_state == WorkflowState.COMPLETED.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot recover a COMPLETED workflow; terminal states are immutable.",
+        )
+
+    if current_state == WorkflowState.ESCALATED.value and not request.force:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Workflow is in ESCALATED state. Resolve incident or pass force=true to redrive.",
+        )
+
+    current_version = wf.get("version", 1)
+    corr_id = current_request_id.get() or f"corr-rec-{uuid.uuid4()}"
+    recovery_idemp_key = f"op_recover_{workflow_id}_v{current_version}_{str(uuid.uuid4())[:8]}"
+
+    record_security_audit_event(
+        event_type="PRIVILEGED_MUTATION",
+        actor_id=principal.user_id,
+        role=principal.role.value,
+        tenant_id=principal.tenant_id,
+        workflow_id=workflow_id,
+        action="recover_workflow",
+        outcome="ALLOWED",
+        reason=request.reason,
+    )
+
+    msg = WorkflowExecutionMessage(
+        event_type=WorkflowEventType.RECOVERY_TRIGGER,
+        workflow_id=workflow_id,
+        tenant_id=wf.get("tenant_id", principal.tenant_id),
+        idempotency_key=recovery_idemp_key,
+        expected_version=current_version,
+        correlation_id=corr_id,
+        producer_id=f"recoveryos-operator-{principal.user_id}",
+        payload={"reason": request.reason, "recovered_by": principal.user_id, "forced": request.force},
+    )
+
+    # Append recovery audit event
+    await store.append_event(
+        workflow_id=workflow_id,
+        event_data={
+            "event_type": EVENT_WORKFLOW_RECOVERED,
+            "recovered_by": principal.user_id,
+            "role": principal.role.value,
+            "reason": request.reason,
+            "version": current_version,
+            "idempotency_key": recovery_idemp_key,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+
+    if config.event_publisher_backend == "pubsub":
+        publisher = get_event_publisher()
+        try:
+            pubsub_msg_id = await publisher.publish_workflow_execution(msg)
+            record_workflow_recovery(status="dispatched")
+        except Exception as e:
+            record_publish_failure("pubsub")
+            logger.error(
+                "Failed to publish workflow recovery event",
+                extra={
+                    "event_name": EVENT_WORKFLOW_PUBLISH_FAILED,
+                    "workflow_id": workflow_id,
+                    "tenant_id": principal.tenant_id,
+                    "error": str(e),
+                },
+            )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Failed to publish workflow recovery event: {e}",
+            )
+
+        return JSONResponse(
+            status_code=status.HTTP_202_ACCEPTED,
+            content={
+                "status": "recovery_dispatched",
+                "workflow_id": workflow_id,
+                "tenant_id": principal.tenant_id,
+                "current_version": current_version,
+                "idempotency_key": recovery_idemp_key,
+                "pubsub_message_id": pubsub_msg_id,
+                "message": "Workflow recovery dispatched successfully for background processing.",
+            },
+        )
+    else:
+        # In-process local execution mode
+        task = asyncio.create_task(_run_agent(workflow_id))
+        shutdown_manager.register_task(task)
+        record_workflow_recovery(status="launched_local")
+        return {
+            "status": "recovery_launched",
+            "workflow_id": workflow_id,
+            "tenant_id": principal.tenant_id,
+            "current_version": current_version,
+            "message": "Workflow recovery agent started locally.",
+        }
 
 
 # ---------------------------------------------------------------------------

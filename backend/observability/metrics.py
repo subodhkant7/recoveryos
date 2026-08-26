@@ -85,3 +85,33 @@ class MetricsRegistry:
 
 # Global metrics registry singleton
 metrics = MetricsRegistry()
+
+
+def record_workflow_dispatched(scenario: str = "unknown", tenant_id: str = "tenant-default") -> None:
+    """Record a workflow dispatch event."""
+    metrics.inc_counter("recoveryos_workflows_dispatched_total", labels={"scenario": scenario, "tenant_id": tenant_id})
+
+
+def record_publish_failure(backend: str = "pubsub") -> None:
+    """Record a failed event publish attempt."""
+    metrics.inc_counter("recoveryos_publish_failures_total", labels={"backend": backend})
+
+
+def record_worker_execution(status: str, failure_type: str = "none") -> None:
+    """Record worker execution delivery outcome."""
+    metrics.inc_counter("recoveryos_worker_executions_total", labels={"status": status.lower(), "failure_type": failure_type.lower()})
+
+
+def record_occ_mismatch() -> None:
+    """Record an optimistic concurrency version conflict."""
+    metrics.inc_counter("recoveryos_occ_mismatches_total")
+
+
+def record_duplicate_claim() -> None:
+    """Record a deduplicated duplicate message claim."""
+    metrics.inc_counter("recoveryos_duplicate_claims_total")
+
+
+def record_workflow_recovery(status: str = "dispatched") -> None:
+    """Record an operator workflow recovery action."""
+    metrics.inc_counter("recoveryos_recoveries_total", labels={"status": status.lower()})
