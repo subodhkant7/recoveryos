@@ -13,7 +13,7 @@ Enforces:
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Callable
 
 from backend.events.message_models import (
     WorkflowExecutionMessage,
@@ -50,10 +50,12 @@ class WorkflowEventConsumer:
         store: BaseWorkflowStore,
         engine: WorkflowEngine,
         worker_id: str = "worker-default",
+        test_failure_hook: Callable[[str, WorkflowExecutionMessage], None] | None = None,
     ):
         self._store = store
         self._engine = engine
         self._worker_id = worker_id
+        self._test_failure_hook = test_failure_hook
 
     async def consume_raw_message(self, raw_json: str | bytes) -> dict[str, Any]:
         """
@@ -84,6 +86,10 @@ class WorkflowEventConsumer:
                 "expected_version": message.expected_version,
             },
         )
+
+        # Optional test hook before claim
+        if self._test_failure_hook:
+            self._test_failure_hook("before_claim", message)
 
         # ------------------------------------------------------------------
         # 1. Tenant & Workflow Existence Check
@@ -168,6 +174,10 @@ class WorkflowEventConsumer:
                 "message_id": message.message_id,
             }
 
+        # Optional test hook after claim
+        if self._test_failure_hook:
+            self._test_failure_hook("after_claim", message)
+
         # ------------------------------------------------------------------
         # 4. OCC Version Check & Execution Transition
         # ------------------------------------------------------------------
@@ -199,12 +209,20 @@ class WorkflowEventConsumer:
                     actor=message.producer_id,
                 )
 
+        # Optional test hook after state transition
+        if self._test_failure_hook:
+            self._test_failure_hook("after_transition", message)
+
         # Mark the operation claim as COMPLETED so redeliveries are skipped
         await self._store.complete_operation(
             idempotency_key=message.idempotency_key,
             result={"status": "PROCESSED", "message_id": message.message_id},
             worker_id=self._worker_id,
         )
+
+        # Optional test hook after completion
+        if self._test_failure_hook:
+            self._test_failure_hook("after_completion", message)
 
         logger.info(
             "Workflow execution message processed successfully",

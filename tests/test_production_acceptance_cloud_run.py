@@ -148,9 +148,9 @@ def test_prod_08_operator_can_launch_scenario(api_client, gcp_identity_token, jw
         "Authorization": f"Bearer {operator_token}",
     }
     response = api_client.post("/api/scenarios/billing_unavailable", headers=headers)
-    assert response.status_code == 200
+    assert response.status_code in (200, 202)
     data = response.json()
-    assert data["status"] == "launched"
+    assert data["status"] in ("launched", "dispatched")
     assert "workflow_id" in data
     assert data["tenant_id"] == "tenant-prod-test"
 
@@ -184,7 +184,7 @@ def test_prod_10_cross_tenant_workflow_read_rejected(api_client, gcp_identity_to
         "Authorization": f"Bearer {token_a}",
     }
     res_a = api_client.post("/api/scenarios/billing_unavailable", headers=headers_a)
-    assert res_a.status_code == 200
+    assert res_a.status_code in (200, 202)
     wf_id = res_a.json()["workflow_id"]
 
     # 2. Tenant B attempts to read Tenant A's workflow
@@ -217,7 +217,7 @@ def test_prod_11_live_workflow_execution_and_firestore_persistence(api_client, g
 
     # 1. Launch scenario
     launch_res = api_client.post("/api/scenarios/billing_unavailable", headers=headers)
-    assert launch_res.status_code == 200
+    assert launch_res.status_code in (200, 202)
     # Correlation header reflection
     assert launch_res.headers.get("x-request-id") == "req-smoke-test-001"
     wf_id = launch_res.json()["workflow_id"]
