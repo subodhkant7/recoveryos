@@ -1,66 +1,130 @@
 # RecoveryOS
 
-> **Autonomous infrastructure recovery that proves the outcome.**
+> **A recovery-first control plane for autonomous operations.**
 > 
-> *When enterprise infrastructure fails, RecoveryOS doesn't just execute a playbook. It observes failure signals, reasons about root causes, executes recovery tools within policy boundaries, independently verifies outcomes, and generates an auditable Recovery Proof.*
+> *RecoveryOS governs autonomous operations with explicit autonomy boundaries and never declares recovery successful until the outcome has been independently verified.*
+> 
+> **Core Invariant:** `Action Executed ≠ Recovery Verified` • **Autonomy Principle:** `Autonomy is governed, not assumed.`
 
 ---
 
-## 1. What It Is
+## 1. Executive Summary & Core Value Proposition
 
-RecoveryOS is an autonomous operations and incident recovery engine built on Google Cloud, Gemini, and the Google Agent Development Kit (ADK). It continuously monitors infrastructure dependencies, correlates multi-provider telemetry, determines compliant recovery actions using deterministic policy engines, executes idempotent recovery tools, and verifies business outcomes before marking systems recovered.
+Traditional automation runs static playbooks (`DETECT → RUN PLAYBOOK`). If an automated script executes with exit code 0, the automation system assumes success—even if the underlying database remains corrupted, downstream billing is broken, or failover created duplicate subscriptions.
 
----
-
-## 2. The Problem
-
-Traditional automation runs static scripts or playbooks when incidents occur. If a script executes with exit code 0, the automation system assumes success—even if the underlying database remains corrupted, downstream billing is broken, or failover created duplicate subscriptions.
-
-In production:
-- **Action Executed ≠ Recovery Verified**: Running `switch_payment_gateway()` does not mean payments are functioning.
-- **Unbounded Autonomy Risks Catastrophe**: An autonomous agent guessing during ambiguous or contradictory incidents can violate compliance and corrupt state.
-- **Worker Crashes Cause Duplication**: An automation process crashing mid-operation often double-bills customers or leaves dangling leases.
+**RecoveryOS treats verification as part of recovery itself.** When infrastructure fails, RecoveryOS observes failure signals, reasons about root causes, executes recovery tools within explicit policy boundaries, independently verifies outcomes, and generates an auditable Recovery Proof Certificate.
 
 ---
 
-## 3. How It Works: The 5-Stage Recovery Lifecycle
-
-RecoveryOS executes through five deterministic lifecycle stages:
+## 2. Architecture & Google Cloud Integration
 
 ```
-[01 DETECT] ───► [02 REASON] ───► [03 ACT] ───► [04 VERIFY] ───► [05 RECOVERED]
-   Signal         Policy &        Idempotent      Independent       Recovery Proof
-  Observed        Autonomy        Tool Action     Outcome Probe       Certificate
++───────────────────────────────────────────────────────────────────────────────────+
+|                         RECOVERYOS RECOVERY CONTROL LOOP                          |
+|                                                                                   |
+|    Telemetry Failure Signal (e.g. Stripe 500 Outage / Contradictory Bureaus)      |
+|                                     │                                             |
+|                                     ▼                                             |
+|    [01 DETECT] ───► Cloud Pub/Sub Telemetry Ingestion (topic: workflow-events)    |
+|                                     │                                             |
+|                                     ▼                                             |
+|    [02 REASON] ───► Gemini 1.5 Pro / Google ADK Agent (Formulates Diagnosis)      |
+|                                     │                                             |
+|                                     ▼                                             |
+|    AUTONOMY POLICY BOUNDARY (Deterministic Python PolicyEngine)                   |
+|             │                                              │                      |
+|     [Policy Permits]                               [Policy Conflict]              |
+|             │                                              │                      |
+|             ▼                                              ▼                      |
+|    [03 ACT] Idempotent Tool Dispatch               [AWAITING_APPROVAL]            |
+|             │ (OCC Lease 60s)                      Human Authorization Gate       |
+|             ▼                                              │                      |
+|    Tentative External Side-Effect                          ▼                      |
+|             │                                     Operator Approve / Reject       |
+|             ▼                                                                     |
+|    [04 VERIFY] Independent Outcome Probe (Active HTTP Verification Query)         |
+|             │                                                                     |
+|             ▼                                                                     |
+|    OutcomeContract.all_verified() == True                                         |
+|             │                                                                     |
+|             ▼                                                                     |
+|    [05 RECOVERED] Issue Cryptographically Bound Recovery Proof Certificate        |
++───────────────────────────────────────────────────────────────────────────────────+
 ```
 
-1. **`01 DETECT`**: Observes telemetry signals (e.g., consecutive HTTP 500 timeouts on primary payment gateways).
-2. **`02 REASON`**: Correlates failure signatures, evaluates deterministic policy constraints (allowed tools, rate limits, risk thresholds), and decides whether autonomous action is authorized.
-3. **`03 ACT`**: Executes idempotent recovery actions (e.g., failover to secondary provider Adyen) with Optimistic Concurrency Control (OCC) operation claims.
-4. **`04 VERIFY`**: Triggers independent outcome verification probes (e.g., active subscription probe returning HTTP 200). The agent cannot transition to `COMPLETED` without fulfilling the `OutcomeContract`.
-5. **`05 RECOVERED`**: Issues a cryptographically bound **Recovery Proof Certificate** with authoritative MTTR, operator intervention records, and contract verification status.
+### Google Cloud Components in Use:
+- **Cloud Run**: Hosts the FastAPI asynchronous Control Plane API and Operator Console (`backend/api/server.py`).
+- **Cloud Pub/Sub**: Event bus for asynchronous event ingestion, telemetry streaming, and worker dispatch (`backend/events/publisher.py`).
+- **Cloud Firestore**: Persistent store for workflow state, OCC leases, idempotency records, and audit logs (`backend/persistence/workflow_store.py`).
+- **Gemini 1.5 Pro & Google ADK**: Powers agentic reasoning, failure correlation, and alternative planning (`backend/agents/agent_factory.py`, `backend/engine/agent_runner.py`).
 
 ---
 
-## 4. Architectural Invariants
+## 3. Direct Source Code Pointers for Judges
 
-- **Action ≠ Recovery**: The state machine strictly forbids direct transitions from `EXECUTING` to `COMPLETED`. All executions must pass through the `VERIFYING` outcome gate.
-- **Bounded Autonomy**: When evidence is contradictory or risk thresholds are exceeded, RecoveryOS refuses to guess. It halts at `AWAITING_APPROVAL` and escalates to an authenticated human approver.
-- **Durable Worker Resilience**: Distributed operation claims use Optimistic Concurrency Control (OCC) leases. If a worker container crashes mid-execution, replacement workers reconcile external state before safely resuming without double execution.
-- **Read-Only Decision Replay**: Historical decision sequences can be replayed deterministically (`PLAY`, `STEP`, `PAUSE`, `RESET`) with zero network mutation calls.
+| Component | File Path | Architectural Responsibility |
+|:---|:---|:---|
+| **State Machine & Invariants** | [`backend/models/workflow.py`](backend/models/workflow.py) | `VALID_TRANSITIONS` forbids `EXECUTING → COMPLETED`. Enforces outcome contract models. |
+| **Autonomy Boundary** | [`backend/engine/policy_engine.py`](backend/engine/policy_engine.py) | Deterministic Python rules enforcing tool permissions, blast radius, and approval thresholds. |
+| **Agent Runner & Verification Gate** | [`backend/engine/agent_runner.py`](backend/engine/agent_runner.py) | Executes ADK loop, transitions to `VERIFYING`, probes outcome, and enforces `contract.all_verified()`. |
+| **Durable OCC Persistence** | [`backend/persistence/workflow_store.py`](backend/persistence/workflow_store.py) | Optimistic Concurrency Control, 60s worker leases, step idempotency deduplication. |
+| **Control Plane Server & SSE** | [`backend/api/server.py`](backend/api/server.py) | FastAPI server, RBAC authorization, single-use SSE ticket minting, operator endpoints. |
+| **Interactive Command Center** | [`backend/api/static/app.js`](backend/api/static/app.js) | Authoritative single-state event machine, read-only replay engine, live inspector. |
+| **Simulation & Failure Injection** | [`backend/simulation/external_services.py`](backend/simulation/external_services.py) | High-fidelity simulated third-party services (Stripe, Adyen, Experian, Equifax). |
 
 ---
 
-## 5. Three Hackathon Demo Scenarios
+## 4. What Is Real vs. What Is Simulated
 
-| Scenario | Failure Mode | Autonomous Behavior | Expected Outcome |
+- **Real & Deterministic**:
+  - Full FastAPI async API server with OpenAPI docs (`/docs`).
+  - Strict Python state machine enforcing `Action ≠ Recovery`.
+  - Deterministic `PolicyEngine` governing autonomous vs human-gated decisions.
+  - Optimistic Concurrency Control (OCC) leases and step-level idempotency stores.
+  - Google ADK agent integration with Gemini 1.5 Pro prompt reasoning loops.
+  - Real single-use SSE ticket streaming and browser event pipeline.
+  - Complete 377-test regression suite.
+- **Simulated for Hackathon Evaluation**:
+  - External SaaS endpoints (Stripe, Adyen, Experian, Equifax) run in a high-fidelity local simulation layer (`backend/simulation/external_services.py`) to provide reproducible, instant, zero-cost failure injection without requiring live third-party bank accounts.
+
+---
+
+## 5. Three Demonstration Scenarios
+
+| Scenario | Capability | Story & Strategic Purpose | Expected Outcome |
 |:---|:---|:---|:---|
-| **01. Billing Outage** | Primary payment provider (Stripe) experiences HTTP 503 outage. | Detects failure, evaluates policy (0 violations), executes failover to Adyen, verifies via live subscription probe. | Autonomous resolution (`MTTR ~5.2s`, `Interventions: 0`). Recovery Proof generated. |
-| **02. Contradictory Evidence** | Credit and identity bureaus return conflicting risk scores (42 vs 88). | Identifies conflicting evidence, detects policy violation for autonomous failover, halts at `AWAITING_APPROVAL`. | Human operator reviews audit card, signs off with `APPROVE` or `REJECT`. |
-| **03. Worker Interruption** | Worker process terminates mid-mutation. | OCC lease expires (60s). Replacement worker reconciles state against external services, resumes idempotently. | Resilient recovery with evidence-gated badges (`✓ NO DUPLICATE EXECUTION`, `✓ NO DOUBLE BILLING`). |
+| **01. Billing Provider Outage** | **Autonomous Recovery** | Primary payment gateway (Stripe) encounters HTTP 500 timeouts → evidence correlated → policy evaluated (0 violations) → automated failover to Adyen → verified via active subscription probe. *Proves autonomous recovery when policy permits.* | Autonomous resolution (`MTTR ~5.2s`, `Interventions: 0`). Recovery Proof generated. |
+| **02. Contradictory Evidence** | **Bounded Autonomy** | Conflicting risk scores (42 vs 88) from Experian and Equifax → policy constraint violated → autonomy boundary reached → autonomous execution safely blocked. *Proves the system knows when NOT to act.* | Safe halt at `AWAITING_APPROVAL`. Operator authorizes or rejects with audit trace. |
+| **03. Worker Interruption** | **Resilient Execution** | Worker container killed mid-mutation → OCC lease expires (60s) → replacement worker reconciles state against external service → resumes idempotently. *Proves recovery mechanism survives crash.* | Safe recovery with evidence-gated badges (`✓ NO DUPLICATE EXECUTION`, `✓ NO DOUBLE BILLING`). |
 
 ---
 
-## 6. Local Setup & Quickstart
+## 6. Recommended 4-Minute Judge Demo Sequence
+
+Refer to [`docs/PHASE_33_FINAL_JUDGE_SCRIPT.md`](docs/PHASE_33_FINAL_JUDGE_SCRIPT.md) for the timed presentation flow:
+
+1. **0:00 - 0:30 (The Problem & Central Thesis)**:
+   - Introduce the core invariant: **Action Executed ≠ Recovery Verified**.
+   - Explain why autonomous operations require a recovery control plane with explicit autonomy boundaries.
+2. **0:30 - 1:45 (Scenario 01: Autonomous Recovery)**:
+   - Click `⚡ SIMULATE AN INCIDENT` → Choose **Billing Provider Outage** → Click `⚡ RUN AUTONOMOUS RECOVERY`.
+   - Watch the 5-stage lifecycle graph: `01 DETECT` → `02 REASON` → `03 ACT` → `04 VERIFY` → `05 RECOVERED`.
+   - Inspect the **"Why Did You Do That?"** decision trace (Questions 01–04).
+   - Review the **Recovery Proof Certificate**: Highlight that recovery was proved by an independent probe, not assumed from tool execution.
+3. **1:45 - 2:45 (Scenario 02: Bounded Autonomy & Refusal to Guess)**:
+   - Click `⚡ SIMULATE AN INCIDENT` → Choose **Contradictory Evidence** → Click `⚡ TEST AUTONOMY BOUNDARY`.
+   - Show that execution **halts** at `AUTONOMY BOUNDARY REACHED: HUMAN APPROVAL REQUIRED` due to conflicting bureau scores.
+   - Click `✓ AUTHORIZE RECOVERY ACTION` to demonstrate operator sign-off and state continuation.
+4. **2:45 - 3:30 (Scenario 03: Worker Resilience & Lease Replay)**:
+   - Click `⚡ SIMULATE AN INCIDENT` → Choose **Worker Interruption** → Click `⚡ TEST RESILIENCE`.
+   - Show OCC lease expiry and state reconciliation without double billing.
+   - Demonstrate `↺ DECISION REPLAY` (Play / Step / Reset) in read-only mode.
+5. **3:30 - 4:00 (Conclusion & Judge Takeaway)**:
+   - Emphasize: *RecoveryOS is not another agent that performs an action; it is a control plane that governs autonomous action and refuses to call recovery successful until the outcome is independently verified.*
+
+---
+
+## 7. Local Setup & Quickstart
 
 ### Prerequisites
 - Python 3.11+
@@ -91,7 +155,7 @@ Open your browser to:
 
 ---
 
-## 7. Running the Test Suite
+## 8. Running the Automated Test Suite
 
 Execute the complete regression test suite:
 ```bash
@@ -99,33 +163,23 @@ source .venv/bin/activate
 python -m pytest tests/ -v --tb=short --ignore=tests/test_distributed_gemini_quota.py
 ```
 
-### Targeted Test Suites:
-- **Judge Attack Suite**: `pytest tests/test_phase33_final_judge_attack.py -v`
-- **Demo Attack Suite**: `pytest tests/test_phase32_demo_attack.py -v`
-- **Adversarial Audit Suite**: `pytest tests/test_phase31_adversarial_audit.py -v`
-- **Integration Suite**: `pytest tests/test_phase30_final_integration.py -v`
-
----
-
-## 8. Live Judge Demo Script (2.5 Minutes)
-
-Refer to [`docs/PHASE_33_FINAL_JUDGE_SCRIPT.md`](docs/PHASE_33_FINAL_JUDGE_SCRIPT.md) for the timed presentation flow:
-1. **0:00 - 0:20**: Problem statement & "Action ≠ Recovery" thesis.
-2. **0:20 - 1:10**: Launch **Scenario 01 (Billing Outage)** → Show 5-stage progression → Inspect 4-Questions card → Show Recovery Proof.
-3. **1:10 - 1:50**: Launch **Scenario 02 (Contradictory Evidence)** → Show autonomy boundary halt → Approve as operator.
-4. **1:50 - 2:30**: Launch **Scenario 03 (Worker Interruption)** → Show OCC lease expiry → Idempotent reconciliation without double billing.
+### Targeted Judge Attack Suites:
+```bash
+pytest tests/test_phase33_final_judge_attack.py -v
+pytest tests/test_phase32_demo_attack.py -v
+```
 
 ---
 
 ## 9. Security & Access Control
 
-- **Role-Based Access Control (RBAC)**: Enforces `VIEWER`, `OPERATOR`, `APPROVER`, and `ADMIN` roles on all administrative routes.
+- **Role-Based Access Control (RBAC)**: Enforces `VIEWER`, `OPERATOR`, `APPROVER`, and `ADMIN` permissions on all administrative endpoints.
 - **Single-Use SSE Tickets**: Streaming endpoints require single-use, cryptographically random tickets (`sset_...`) with a 60-second TTL to eliminate JWT leakage in server logs.
-- **Zero Embedded Credentials**: Static frontend assets contain zero API keys, secrets, or bearer tokens.
+- **Zero Embedded Credentials**: Scanned with 0 API keys, JWT secrets, or private keys across all static assets.
 
 ---
 
 ## 10. Current Limitations & Scope
 
-- **Simulated External Providers**: In development and demo environments, external billing and verification endpoints (Stripe, Adyen, Experian, Equifax) use deterministic high-fidelity simulation layers to allow reproducible failure injection.
-- **Rate Limits on Live Cloud Gemini**: Live unmocked external Gemini calls depend on project quota; local in-memory execution mode is used for deterministic, instant judge evaluation.
+- **Synthetic Incident Data**: External third-party billing and verification endpoints use deterministic simulated services (`backend/simulation/external_services.py`) to allow reproducible failure injection during evaluation.
+- **Live Cloud Gemini Rate Limits**: Live unmocked external Gemini calls depend on project quota; local in-memory execution mode is used for deterministic, instant judge evaluation.

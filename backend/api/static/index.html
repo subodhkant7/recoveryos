@@ -3,8 +3,41 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>RecoveryOS — Operator Control Plane & Autonomous Command Center</title>
-  <meta name="description" content="RecoveryOS: Autonomous operations engine that observes failures, reasons about root causes, executes recovery tools, and verifies outcome recovery.">
+  <title>RecoveryOS — Recovery-First Control Plane for Autonomous Operations</title>
+  <meta name="description" content="RecoveryOS is a recovery-first control plane for autonomous operations. Govern agent actions with explicit autonomy boundaries and independently verify recovery before declaring success.">
+  <meta name="keywords" content="recovery-first control plane, autonomous operations, autonomous recovery, recovery automation, bounded autonomy, verified recovery, autonomous incident recovery, recovery orchestration, outcome verification, recovery proof">
+  <meta name="application-name" content="RecoveryOS — Operator Control Plane">
+  <link rel="canonical" href="http://localhost:8000/console/">
+
+  <!-- Open Graph / Social Sharing -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="http://localhost:8000/console/">
+  <meta property="og:title" content="RecoveryOS — Recovery-First Control Plane for Autonomous Operations">
+  <meta property="og:description" content="Autonomous recovery with explicit autonomy boundaries, independent verification, and recovery proof.">
+  <meta property="og:site_name" content="RecoveryOS — Operator Control Plane">
+
+  <!-- Twitter / X Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="RecoveryOS — Recovery-First Control Plane for Autonomous Operations">
+  <meta name="twitter:description" content="Autonomous recovery with explicit autonomy boundaries, independent verification, and recovery proof.">
+
+  <!-- JSON-LD Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "RecoveryOS",
+    "applicationCategory": "DevOpsApplication",
+    "operatingSystem": "Cloud / Linux",
+    "description": "RecoveryOS is a recovery-first control plane for autonomous operations. It governs agent actions with explicit autonomy boundaries and independently verifies recovery before declaring success.",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    }
+  }
+  </script>
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -23,13 +56,13 @@
           </div>
           <div class="brand-titles">
             <span class="brand-title">RECOVERY<span class="brand-glow">OS</span></span>
-            <span class="brand-sub">AUTONOMOUS OPERATIONS COMMAND CENTER</span>
+            <span class="brand-sub">RECOVERY-FIRST CONTROL PLANE • AUTONOMOUS OPERATIONS COMMAND CENTER</span>
           </div>
         </div>
 
         <div class="system-health-pill" id="system-health-indicator">
           <span class="status-dot online"></span>
-          <span class="status-label">AUTONOMOUS RECOVERY ENGINE</span>
+          <span class="status-label">RECOVERY CONTROL PLANE</span>
           <span class="status-meta">ONLINE</span>
         </div>
       </div>
@@ -78,9 +111,10 @@
     <!-- Hero Ribbon / Live Autonomous HUD -->
     <section class="hero-ribbon">
       <div class="hero-story-block">
+        <div class="story-eyebrow">RECOVERYOS • RECOVERY-FIRST CONTROL PLANE • ONLINE</div>
         <div class="story-headline">
-          <span class="story-accent">AUTONOMOUS RECOVERY ENGINE:</span>
-          <span class="story-text">"When infrastructure fails, RecoveryOS doesn't just execute a playbook. It observes, reasons, acts, verifies — and proves recovery."</span>
+          <span class="story-accent">AUTONOMOUS OPERATIONS NEED A RECOVERY CONTROL PLANE.</span>
+          <span class="story-text">RecoveryOS governs autonomous recovery through explicit policies and autonomy boundaries. It acts when confidence and policy permit, halts when human authorization is required, and declares recovery only after independent verification confirms the outcome.</span>
         </div>
         <div class="hero-kpi-row">
           <div class="kpi-unit">
@@ -103,6 +137,13 @@
             <span class="kpi-label">Total Fleet Runs</span>
           </div>
         </div>
+        <div class="gcp-stack-row">
+          <span class="gcp-tag">GOOGLE CLOUD STACK:</span>
+          <span class="gcp-badge">☁️ Cloud Run API</span>
+          <span class="gcp-badge">📨 Cloud Pub/Sub Events</span>
+          <span class="gcp-badge">⚡ Cloud Firestore OCC</span>
+          <span class="gcp-badge">🤖 Gemini 1.5 Pro ADK</span>
+        </div>
       </div>
 
       <div class="hero-actions-primary">
@@ -111,7 +152,7 @@
             <span class="btn-icon-flash">⚡</span>
             <span class="btn-text-main">SIMULATE AN INCIDENT</span>
           </div>
-          <span class="btn-subtext">Trigger Real Autonomous Recovery Demo</span>
+          <span class="btn-subtext">Trigger Governed Autonomous Recovery Demo</span>
         </button>
         <button id="btn-view-fleet" class="btn-secondary-fleet">
           <span>📡 VIEW LIVE FLEET</span>
@@ -176,13 +217,13 @@
           <span class="story-arrow">→</span>
           <div class="story-step" id="narrative-step-2">ROOT CAUSE CORRELATED</div>
           <span class="story-arrow">→</span>
-          <div class="story-step" id="narrative-step-3">RECOVERY AUTHORIZED</div>
+          <div class="story-step" id="narrative-step-3">POLICY CHECK &amp; AUTONOMY</div>
           <span class="story-arrow">→</span>
-          <div class="story-step" id="narrative-step-4">RECOVERY EXECUTED</div>
+          <div class="story-step" id="narrative-step-4">ACTION EXECUTED</div>
           <span class="story-arrow">→</span>
           <div class="story-step" id="narrative-step-5">OUTCOME VERIFIED</div>
           <span class="story-arrow">→</span>
-          <div class="story-step" id="narrative-step-6">SYSTEM RECOVERED</div>
+          <div class="story-step" id="narrative-step-6">RECOVERY PROVED</div>
         </div>
 
         <!-- Canvas Header & Replay Controls -->
@@ -215,7 +256,7 @@
           <div class="agent-nodes-pipeline" id="agent-nodes-pipeline">
             
             <!-- Node 01: Detect -->
-            <button class="agent-node" id="node-detect" data-stage="detect" title="Click to view Detection Evidence">
+            <button class="agent-node" id="node-detect" data-stage="detect" title="01 DETECT • Observe failure signals & collect evidence">
               <div class="node-icon-box">
                 <span class="node-num">01</span>
                 <span class="node-glyph">👁️</span>
@@ -232,14 +273,14 @@
             </div>
 
             <!-- Node 02: Reason -->
-            <button class="agent-node" id="node-reason" data-stage="reason" title="Click to view Reasoning Diagnosis">
+            <button class="agent-node" id="node-reason" data-stage="reason" title="02 REASON • Correlate evidence & evaluate policy">
               <div class="node-icon-box">
                 <span class="node-num">02</span>
                 <span class="node-glyph">🧠</span>
               </div>
               <div class="node-info">
                 <div class="node-role">REASON</div>
-                <div class="node-action" id="node-reason-action">Root Cause Diagnosis</div>
+                <div class="node-action" id="node-reason-action">Policy &amp; Diagnosis</div>
               </div>
               <div class="node-status-badge" id="node-reason-badge">WAITING</div>
             </button>
@@ -249,14 +290,14 @@
             </div>
 
             <!-- Node 03: Recover / Act -->
-            <button class="agent-node" id="node-recover" data-stage="recover" title="Click to view Tool Execution">
+            <button class="agent-node" id="node-recover" data-stage="recover" title="03 ACT • Execute permitted idempotent tool action">
               <div class="node-icon-box">
                 <span class="node-num">03</span>
                 <span class="node-glyph">⚙️</span>
               </div>
               <div class="node-info">
                 <div class="node-role">ACT</div>
-                <div class="node-action" id="node-recover-action">Tool Execution</div>
+                <div class="node-action" id="node-recover-action">Bounded Tool Action</div>
               </div>
               <div class="node-status-badge" id="node-recover-badge">WAITING</div>
             </button>
@@ -266,14 +307,14 @@
             </div>
 
             <!-- Node 04: Verify -->
-            <button class="agent-node" id="node-verify" data-stage="verify" title="Click to view Verification Proof">
+            <button class="agent-node" id="node-verify" data-stage="verify" title="04 VERIFY • Independently verify required outcomes">
               <div class="node-icon-box">
                 <span class="node-num">04</span>
                 <span class="node-glyph">🛡️</span>
               </div>
               <div class="node-info">
                 <div class="node-role">VERIFY</div>
-                <div class="node-action" id="node-verify-action">Outcome Verification</div>
+                <div class="node-action" id="node-verify-action">Independent Outcome Probe</div>
               </div>
               <div class="node-status-badge" id="node-verify-badge">WAITING</div>
             </button>
@@ -283,14 +324,14 @@
             </div>
 
             <!-- Node 05: Recovered -->
-            <button class="agent-node outcome-node" id="node-recovered" data-stage="recovered" title="Click to view Final Outcome">
+            <button class="agent-node outcome-node" id="node-recovered" data-stage="recovered" title="05 RECOVERED • Declare recovery only when outcome contract is fulfilled">
               <div class="node-icon-box">
                 <span class="node-num">05</span>
                 <span class="node-glyph">✅</span>
               </div>
               <div class="node-info">
                 <div class="node-role">RECOVERED</div>
-                <div class="node-action" id="node-recovered-action">Zero-Downtime Restored</div>
+                <div class="node-action" id="node-recovered-action">Outcome Verified &amp; Proved</div>
               </div>
               <div class="node-status-badge" id="node-recovered-badge">STABLE</div>
             </button>
@@ -300,7 +341,7 @@
         <!-- Action ≠ Recovery Visual Callout Banner -->
         <div class="action-vs-recovery-pill" id="action-vs-recovery-pill">
           <span class="pill-tag">CORE PRINCIPLE:</span>
-          <span class="pill-text">ACTION EXECUTED ≠ RECOVERY VERIFIED • Recovery requires independent verification of required outcomes</span>
+          <span class="pill-text">ACTION EXECUTED ≠ RECOVERY VERIFIED • Executing a recovery action is not proof that the system recovered. RecoveryOS independently verifies the required outcome before declaring the workflow recovered.</span>
         </div>
 
         <!-- Explicit Autonomy Decision Card -->
@@ -321,7 +362,7 @@
             <span class="approval-alert-icon">⚠️</span>
             <div class="approval-titles">
               <h3 class="approval-title">AUTONOMY BOUNDARY REACHED: HUMAN APPROVAL REQUIRED</h3>
-              <p class="approval-sub" id="approval-reason-text">RecoveryOS detected conflicting provider evidence. Autonomous execution safely halted to prevent duplicate mutation.</p>
+              <p class="approval-sub" id="approval-reason-text">Conflicting evidence prevents safe autonomous execution. RecoveryOS halts before taking the unsafe action and requires human authorization.</p>
             </div>
           </div>
           <div class="approval-conflict-box" id="approval-conflict-box">
@@ -336,7 +377,7 @@
             </div>
           </div>
           <div class="approval-why-stopped">
-            <b>WHY WE STOPPED:</b> Policy requires human approval when evidence is contradictory across verification sources.
+            <b>WHY WE STOPPED:</b> Autonomy is governed, not assumed. Policy requires human approval when evidence is contradictory across verification sources.
           </div>
           <div class="approval-details" id="approval-details-box">
             Proposed Action: <code>switch_risk_verification_model(strict_mode=True)</code>
@@ -396,7 +437,7 @@
             <span class="proof-badge-icon">🛡️</span>
             <div class="proof-header-titles">
               <h4 class="proof-title">RECOVERY PROOF</h4>
-              <span class="proof-subtitle" id="proof-scenario-name">Billing Provider Unavailable • Autonomous Resolution</span>
+              <span class="proof-subtitle" id="proof-scenario-name">Recovery is not a claim. It is a verified outcome.</span>
             </div>
             <span class="proof-stamp">✓ VERIFIED RECOVERY</span>
           </div>
@@ -426,6 +467,10 @@
               <span class="p-val pass" id="proof-contract-status">✓ FULFILLED</span>
             </div>
           </div>
+          <div class="proof-distinction-bar">
+            <span class="distinction-tag">INVARIANT PROOF:</span>
+            <span class="distinction-text">Agent Action Executed ≠ Recovery Proved. Verified via Independent Subscription Probe (HTTP 200) → Contract Satisfied.</span>
+          </div>
         </div>
 
         <!-- Live Agent Event Stream Terminal -->
@@ -445,7 +490,7 @@
 
           <div class="terminal-feed" id="terminal-feed-container">
             <div class="terminal-welcome">
-              <span class="prompt-prefix">recoveryos:~$</span> Autonomous operations engine watching telemetry. Click [⚡ SIMULATE AN INCIDENT] to trigger live recovery.
+              <span class="prompt-prefix">recoveryos:~$</span> Recovery-first control plane monitoring telemetry. Click [⚡ SIMULATE AN INCIDENT] to trigger governed recovery.
             </div>
           </div>
         </div>
@@ -454,7 +499,7 @@
         <div class="why-recoveryos-banner">
           <div class="why-core-badge">WHY RECOVERYOS?</div>
           <div class="why-text-wrap">
-            <span>Traditional automation executes scripts. <b>RecoveryOS observes → reasons → acts → verifies → learns from outcomes.</b> The system does not stop at "action executed" — it stops at "outcome verified."</span>
+            <span>Traditional automation: <code>DETECT → RUN PLAYBOOK</code>. <b>RecoveryOS governs: <code>DETECT → REASON → POLICY → ACT → VERIFY → PROVE</code>.</b> Recovery is declared only after independent verification.</span>
           </div>
         </div>
 
@@ -467,7 +512,7 @@
             <span class="panel-icon">🔍</span>
             <h2 class="panel-title">WHY DID I DO THAT?</h2>
           </div>
-          <div class="inspector-badge" id="inspector-badge">EXPLAINABLE AI AUDIT</div>
+          <div class="inspector-badge" id="inspector-badge">RECOVERY DECISION TRACE</div>
         </div>
 
         <div class="inspector-body" id="inspector-body-container">
@@ -549,6 +594,16 @@
 
     </main>
 
+    <!-- Sleek Bottom Footer Bar -->
+    <footer class="command-center-footer">
+      <div class="footer-left">
+        <span class="footer-brand">RecoveryOS</span> — Recovery-first control plane for autonomous operations.
+      </div>
+      <div class="footer-right">
+        <span class="footer-tagline">Govern. Recover. Verify. Prove.</span>
+      </div>
+    </footer>
+
     <!-- MODAL: Simulate Incident (The Aha Moment Launcher) -->
     <div class="modal-overlay hidden" id="modal-scenario-launcher">
       <div class="modal-card launcher-modal">
@@ -561,7 +616,7 @@
         </div>
 
         <div class="modal-body">
-          <p class="modal-subtext">Choose an infrastructure failure scenario. Watch RecoveryOS detect the fault, reason through diagnosis, execute recovery tools, and prove outcome verification.</p>
+          <p class="modal-subtext">Choose an infrastructure failure scenario. Watch RecoveryOS detect the fault, evaluate policy boundaries, execute recovery tools, and prove outcome verification.</p>
 
           <div class="scenario-grid">
             <!-- Scenario 1: Billing Unavailable (Primary Hero Demo) -->
@@ -572,7 +627,7 @@
                   <span class="scenario-badge badge-blue">SCENARIO 01 • AUTONOMOUS RECOVERY</span>
                   <span class="scenario-name">Billing Provider Outage</span>
                 </div>
-                <p class="scenario-desc"><b>Failure:</b> Primary provider becomes unavailable (HTTP 500).<br/><b>Agent Behavior:</b> Provider failure → evidence correlation → policy approval → failover → deterministic verification.<br/><b>Human Intervention:</b> None.<br/><b>Expected Outcome:</b> Billing restored autonomously.</p>
+                <p class="scenario-desc"><b>Failure:</b> Primary provider becomes unavailable (HTTP 500).<br/><b>Agent Behavior:</b> Provider failure → evidence correlation → policy evaluation → autonomous failover → independent verification.<br/><b>Human Intervention:</b> 0 (None).<br/><b>Strategic Purpose:</b> Demonstrates when RecoveryOS is allowed to act autonomously.</p>
                 <div class="scenario-flow">
                   <span>Stripe 500 Outage</span> → <span>Autonomous Failover</span> → <span>Verified Subscription</span>
                 </div>
@@ -587,7 +642,7 @@
                   <span class="scenario-badge badge-purple">SCENARIO 02 • BOUNDED AUTONOMY</span>
                   <span class="scenario-name">Contradictory Evidence</span>
                 </div>
-                <p class="scenario-desc"><b>Failure:</b> Evidence conflicts across verification providers.<br/><b>Agent Behavior:</b> Conflicting evidence → unsafe autonomous action blocked → human approval required.<br/><b>Human Intervention:</b> Required.<br/><b>Expected Outcome:</b> Safe escalation at autonomy boundary.</p>
+                <p class="scenario-desc"><b>Failure:</b> Evidence conflicts across verification providers.<br/><b>Agent Behavior:</b> Conflicting evidence → autonomy boundary reached → autonomous execution halted → human authorization required.<br/><b>Human Intervention:</b> Required.<br/><b>Strategic Purpose:</b> Demonstrates when RecoveryOS deliberately refuses autonomous execution.</p>
                 <div class="scenario-flow">
                   <span>Conflicting Providers</span> → <span>Safe Escalation</span> → <span>Human Approval</span>
                 </div>
@@ -602,7 +657,7 @@
                   <span class="scenario-badge badge-amber">SCENARIO 03 • RESILIENT EXECUTION</span>
                   <span class="scenario-name">Worker Interruption</span>
                 </div>
-                <p class="scenario-desc"><b>Failure:</b> Worker container is terminated mid-flight.<br/><b>Agent Behavior:</b> Worker interruption → lease expiry → state reconciliation → safe resume.<br/><b>Human Intervention:</b> None.<br/><b>Expected Outcome:</b> Safe idempotent continuation without duplicate execution.</p>
+                <p class="scenario-desc"><b>Failure:</b> Worker container terminates mid-flight.<br/><b>Agent Behavior:</b> Worker interruption → lease expiry → external-state reconciliation → safe idempotent resume.<br/><b>Human Intervention:</b> None.<br/><b>Strategic Purpose:</b> Demonstrates that the recovery mechanism itself is designed to tolerate execution interruption.</p>
                 <div class="scenario-flow">
                   <span>Worker Killed</span> → <span>OCC Lease Timeout</span> → <span>Idempotent Safe Resume</span>
                 </div>

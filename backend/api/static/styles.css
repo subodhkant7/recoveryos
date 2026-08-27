@@ -326,6 +326,15 @@ body.dark-theme {
   max-width: 65%;
 }
 
+.story-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  font-weight: 800;
+  color: var(--cyan-core);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
 .story-headline {
   font-size: 12px;
   line-height: 1.4;
@@ -334,9 +343,9 @@ body.dark-theme {
 .story-accent {
   font-family: var(--font-mono);
   font-weight: 800;
-  color: var(--cyan-core);
+  color: var(--text-highlight);
   margin-right: 6px;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
 }
 
 .story-text {
@@ -1237,6 +1246,60 @@ body.dark-theme {
   border-radius: 6px;
 }
 
+.proof-distinction-bar {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px dashed rgba(16, 185, 129, 0.4);
+  border-radius: 5px;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.distinction-tag {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 800;
+  color: var(--emerald-core);
+  background: rgba(16, 185, 129, 0.15);
+  padding: 1px 5px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.distinction-text {
+  color: var(--text-muted);
+}
+
+.gcp-stack-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.gcp-tag {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 800;
+  color: var(--text-dim);
+  letter-spacing: 0.08em;
+}
+
+.gcp-badge {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
 .proof-item {
   display: flex;
   flex-direction: column;
@@ -1903,3 +1966,30 @@ body.dark-theme {
   50%  { box-shadow: 0 0 10px 2px rgba(0, 240, 255, 0.2); }
   100% { box-shadow: none; }
 }
+
+/* Bottom Command Center Footer */
+.command-center-footer {
+  height: 26px;
+  background-color: var(--bg-panel);
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  font-size: 11px;
+  color: var(--text-dim);
+  z-index: 50;
+}
+
+.footer-brand {
+  font-weight: 700;
+  color: var(--cyan-core);
+}
+
+.footer-tagline {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
+}
+
