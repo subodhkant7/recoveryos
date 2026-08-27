@@ -53,13 +53,50 @@ class BaseWorkflowStore(ABC):
         pass
 
     @abstractmethod
-    async def list_workflows(self) -> list[dict[str, Any]]:
-        """List all workflow documents."""
+    async def list_workflows(
+        self,
+        tenant_id: str | None = None,
+        state: str | None = None,
+        scenario: str | None = None,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        """List workflow documents with optional filtering and pagination."""
+        pass
+
+    @abstractmethod
+    async def count_workflows(
+        self,
+        tenant_id: str | None = None,
+        state: str | None = None,
+    ) -> int:
+        """Count workflow documents matching criteria."""
         pass
 
     @abstractmethod
     async def get_incomplete_workflows(self) -> list[dict[str, Any]]:
         """Find workflows not in terminal states (COMPLETED, ESCALATED)."""
+        pass
+
+    # ------------------------------------------------------------------
+    # Audit Events
+    # ------------------------------------------------------------------
+
+    @abstractmethod
+    async def save_audit_event(self, audit_data: dict[str, Any]) -> None:
+        """Save an immutable security/operator audit event."""
+        pass
+
+    @abstractmethod
+    async def list_audit_events(
+        self,
+        tenant_id: str | None = None,
+        workflow_id: str | None = None,
+        event_type: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        """List audit events with optional filtering and pagination."""
         pass
 
     # ------------------------------------------------------------------
@@ -285,6 +322,7 @@ class InMemoryWorkflowStore(BaseWorkflowStore):
             self._approvals = shared_data["approvals"]
             self._idempotency = shared_data["idempotency"]
             self._operations = shared_data.get("operations", {})
+            self._audit_events = shared_data.get("audit_events", [])
         else:
             self._workflows: dict[str, dict[str, Any]] = {}
             self._steps: dict[str, dict[str, dict[str, Any]]] = {}
@@ -295,6 +333,7 @@ class InMemoryWorkflowStore(BaseWorkflowStore):
             self._approvals: dict[str, dict[str, dict[str, Any]]] = {}
             self._idempotency: dict[str, dict[str, Any]] = {}
             self._operations: dict[str, dict[str, Any]] = {}
+            self._audit_events: list[dict[str, Any]] = []
         self._locks: dict[str, asyncio.Lock] = {}
         self._global_lock = asyncio.Lock()
 
@@ -315,6 +354,7 @@ class InMemoryWorkflowStore(BaseWorkflowStore):
             "approvals": copy.deepcopy(self._approvals),
             "idempotency": copy.deepcopy(self._idempotency),
             "operations": copy.deepcopy(self._operations),
+            "audit_events": copy.deepcopy(self._audit_events),
         }
 
     async def save_workflow(
@@ -341,8 +381,49 @@ class InMemoryWorkflowStore(BaseWorkflowStore):
         data = self._workflows.get(workflow_id)
         return copy.deepcopy(data) if data else None
 
-    async def list_workflows(self) -> list[dict[str, Any]]:
-        return [copy.deepcopy(w) for w in self._workflows.values()]
+    async def list_workflows(
+        self,
+        tenant_id: str | None = None,
+        state: str | None = None,
+        scenario: str | None = None,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        results: list[dict[str, Any]] = []
+        for w in self._workflows.values():
+            if tenant_id and w.get("tenant_id", "tenant-default") != tenant_id:
+                continue
+            if state and w.get("state") != state:
+                continue
+            if scenario and w.get("scenario") != scenario:
+                continue
+            results.append(copy.deepcopy(w))
+
+        # Sort by updated_at or created_at desc if available
+        results.sort(
+            key=lambda x: x.get("updated_at") or x.get("created_at") or "",
+            reverse=True,
+        )
+
+        if offset > 0:
+            results = results[offset:]
+        if limit is not None and limit > 0:
+            results = results[:limit]
+        return results
+
+    async def count_workflows(
+        self,
+        tenant_id: str | None = None,
+        state: str | None = None,
+    ) -> int:
+        count = 0
+        for w in self._workflows.values():
+            if tenant_id and w.get("tenant_id", "tenant-default") != tenant_id:
+                continue
+            if state and w.get("state") != state:
+                continue
+            count += 1
+        return count
 
     async def get_incomplete_workflows(self) -> list[dict[str, Any]]:
         return [
@@ -613,6 +694,36 @@ class InMemoryWorkflowStore(BaseWorkflowStore):
         data = self._operations.get(idempotency_key)
         return copy.deepcopy(data) if data else None
 
+    async def save_audit_event(self, audit_data: dict[str, Any]) -> None:
+        async with self._global_lock:
+            self._audit_events.append(copy.deepcopy(audit_data))
+
+    async def list_audit_events(
+        self,
+        tenant_id: str | None = None,
+        workflow_id: str | None = None,
+        event_type: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        async with self._global_lock:
+            results: list[dict[str, Any]] = []
+            for ev in self._audit_events:
+                if tenant_id and ev.get("tenant_id") != tenant_id and tenant_id != "all":
+                    continue
+                if workflow_id and ev.get("workflow_id") != workflow_id:
+                    continue
+                if event_type and ev.get("event_type") != event_type:
+                    continue
+                results.append(copy.deepcopy(ev))
+
+            results.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+            if offset > 0:
+                results = results[offset:]
+            if limit > 0:
+                results = results[:limit]
+            return results
+
     async def get_workflow_snapshot(self, workflow_id: str) -> dict[str, Any] | None:
         workflow = await self.get_workflow(workflow_id)
         if not workflow:
@@ -708,10 +819,51 @@ class FirestoreWorkflowStore(BaseWorkflowStore):
         doc = await client.collection("workflows").document(workflow_id).get()
         return doc.to_dict() if doc.exists else None
 
-    async def list_workflows(self) -> list[dict[str, Any]]:
+    async def list_workflows(
+        self,
+        tenant_id: str | None = None,
+        state: str | None = None,
+        scenario: str | None = None,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
         client = await self._get_client()
-        docs = client.collection("workflows").stream()
-        return [doc.to_dict() async for doc in docs]
+        query = client.collection("workflows")
+        if tenant_id:
+            query = query.where("tenant_id", "==", tenant_id)
+        if state:
+            query = query.where("state", "==", state)
+        if scenario:
+            query = query.where("scenario", "==", scenario)
+
+        docs = query.stream()
+        results = [doc.to_dict() async for doc in docs]
+        results.sort(
+            key=lambda x: x.get("updated_at") or x.get("created_at") or "",
+            reverse=True,
+        )
+        if offset > 0:
+            results = results[offset:]
+        if limit is not None and limit > 0:
+            results = results[:limit]
+        return results
+
+    async def count_workflows(
+        self,
+        tenant_id: str | None = None,
+        state: str | None = None,
+    ) -> int:
+        client = await self._get_client()
+        query = client.collection("workflows")
+        if tenant_id:
+            query = query.where("tenant_id", "==", tenant_id)
+        if state:
+            query = query.where("state", "==", state)
+        docs = query.stream()
+        count = 0
+        async for _ in docs:
+            count += 1
+        return count
 
     async def get_incomplete_workflows(self) -> list[dict[str, Any]]:
         client = await self._get_client()
@@ -1011,6 +1163,38 @@ class FirestoreWorkflowStore(BaseWorkflowStore):
         client = await self._get_client()
         doc = await client.collection("operation_claims").document(idempotency_key).get()
         return doc.to_dict() if doc.exists else None
+
+    async def save_audit_event(self, audit_data: dict[str, Any]) -> None:
+        client = await self._get_client()
+        audit_id = audit_data.get("audit_id") or f"audit-{datetime.now(timezone.utc).timestamp()}"
+        doc_ref = client.collection("audit_events").document(audit_id)
+        await doc_ref.set(audit_data)
+
+    async def list_audit_events(
+        self,
+        tenant_id: str | None = None,
+        workflow_id: str | None = None,
+        event_type: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        client = await self._get_client()
+        query = client.collection("audit_events")
+        if tenant_id and tenant_id != "all":
+            query = query.where("tenant_id", "==", tenant_id)
+        if workflow_id:
+            query = query.where("workflow_id", "==", workflow_id)
+        if event_type:
+            query = query.where("event_type", "==", event_type)
+
+        docs = query.stream()
+        results = [doc.to_dict() async for doc in docs]
+        results.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+        if offset > 0:
+            results = results[offset:]
+        if limit > 0:
+            results = results[:limit]
+        return results
 
     async def get_workflow_snapshot(self, workflow_id: str) -> dict[str, Any] | None:
         workflow = await self.get_workflow(workflow_id)

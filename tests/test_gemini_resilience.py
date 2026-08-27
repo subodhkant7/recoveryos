@@ -64,6 +64,11 @@ import backend.api.server as srv
 @pytest.fixture(autouse=True)
 def setup_resilience_env():
     clear_resilience_events()
+    orig_store = srv.store
+    orig_engine = srv.engine
+    yield
+    srv.store = orig_store
+    srv.engine = orig_engine
 
 
 @pytest.mark.asyncio

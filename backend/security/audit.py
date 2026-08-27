@@ -8,6 +8,7 @@ Guarantees that raw JWTs, secrets, and authorization headers are never logged.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Any
@@ -15,6 +16,13 @@ from typing import Any
 logger = logging.getLogger("recoveryos.security.audit")
 
 _SECURITY_AUDIT_LOGS: list[dict[str, Any]] = []
+_AUDIT_STORE_HOOK = None
+
+
+def set_audit_store_hook(hook) -> None:
+    """Set optional persistence hook (e.g. async save_audit_event or store)."""
+    global _AUDIT_STORE_HOOK
+    _AUDIT_STORE_HOOK = hook
 
 
 def record_security_audit_event(
@@ -54,6 +62,15 @@ def record_security_audit_event(
         f"[SECURITY_AUDIT] type={event_type} actor={actor_id} role={role} "
         f"workflow={workflow_id} action={action} outcome={outcome} reason='{reason}'"
     )
+
+    if _AUDIT_STORE_HOOK is not None:
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.create_task(_AUDIT_STORE_HOOK(event))
+        except Exception:
+            pass
+
     return event
 
 
@@ -65,3 +82,4 @@ def get_security_audit_logs() -> list[dict[str, Any]]:
 def clear_security_audit_logs() -> None:
     """Clear in-memory security audit log history (for unit test isolation)."""
     _SECURITY_AUDIT_LOGS.clear()
+

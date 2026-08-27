@@ -30,6 +30,16 @@ from backend.agents.agent_factory import AgentFactory
 from backend.simulation.scenarios import create_acme_contract, ACME_CUSTOMER_DATA
 
 
+@pytest.fixture(autouse=True)
+def preserve_server_state():
+    import backend.api.server as srv
+    orig_store = srv.store
+    orig_engine = srv.engine
+    yield
+    srv.store = orig_store
+    srv.engine = orig_engine
+
+
 @pytest.fixture
 def test_setup():
     injector = FailureInjector()

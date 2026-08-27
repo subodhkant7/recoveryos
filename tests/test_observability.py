@@ -29,6 +29,13 @@ from backend.security.principal import Role
 @pytest.fixture(autouse=True)
 def reset_observability():
     metrics.clear()
+    current_request_id.set("")
+    current_workflow_id.set("")
+    current_tenant_id.set("")
+    yield
+    current_request_id.set("")
+    current_workflow_id.set("")
+    current_tenant_id.set("")
 
 
 def test_structured_json_formatting():

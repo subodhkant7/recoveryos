@@ -10,13 +10,15 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import uuid
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Response, Security, status
+from fastapi import Depends, FastAPI, HTTPException, Query, Response, Security, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from backend.config import config
@@ -42,7 +44,7 @@ from backend.events import (
 )
 from backend.security.principal import Principal, Role, Permission
 from backend.security.dependencies import get_current_principal, require_role, require_permission
-from backend.security.audit import record_security_audit_event
+from backend.security.audit import record_security_audit_event, set_audit_store_hook
 from backend.observability.logging import (
     current_request_id,
     EVENT_WORKFLOW_DISPATCHED,
@@ -92,6 +94,14 @@ engine = WorkflowEngine(store)
 policy_engine = PolicyEngine()
 agent_factory = AgentFactory(store, engine, services, policy_engine)
 
+# Connect persistent audit store hook
+set_audit_store_hook(store.save_audit_event)
+
+# Mount static files for Operator Console UI
+STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+if os.path.exists(STATIC_DIR):
+    app.mount("/console", StaticFiles(directory=STATIC_DIR, html=True), name="console")
+
 _event_publisher: BaseEventPublisher | None = None
 
 
@@ -125,6 +135,10 @@ class ApprovalRequest(BaseModel):
 class WorkflowRecoveryRequest(BaseModel):
     reason: str = "Operator requested workflow recovery"
     force: bool = False  # If true, allows recovering ESCALATED workflows
+
+
+class WorkflowCancelRequest(BaseModel):
+    reason: str = "Operator requested workflow cancellation"
 
 
 # ---------------------------------------------------------------------------
@@ -321,14 +335,58 @@ async def launch_scenario(
 
 @app.get("/api/workflows")
 async def list_workflows(
+    state: Optional[str] = None,
+    scenario: Optional[str] = None,
+    is_stuck: Optional[bool] = None,
+    search: Optional[str] = None,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     principal: Principal = Depends(get_current_principal),
 ):
-    """AUTHENTICATED endpoint: List workflows scoped to principal tenant."""
-    all_workflows = await store.list_workflows()
-    if principal.role == Role.ADMIN:
-        return {"workflows": all_workflows}
-    filtered = [w for w in all_workflows if w.get("tenant_id", "tenant-default") == principal.tenant_id]
-    return {"workflows": filtered}
+    """
+    AUTHENTICATED endpoint: List workflows scoped to principal tenant with filtering and pagination.
+    """
+    tenant_filter = None if principal.role == Role.ADMIN else principal.tenant_id
+    raw_workflows = await store.list_workflows(
+        tenant_id=tenant_filter,
+        state=state,
+        scenario=scenario,
+    )
+
+    # Post-filtering for search and is_stuck
+    filtered: list[dict[str, Any]] = []
+    for wf in raw_workflows:
+        wf_id = wf.get("workflow_id", "")
+        wf_name = wf.get("name", "")
+        cust_name = wf.get("customer_data", {}).get("company_name", "")
+
+        if search:
+            q = search.lower()
+            if q not in wf_id.lower() and q not in wf_name.lower() and q not in cust_name.lower():
+                continue
+
+        # Evaluate stuck status if requested
+        diag = compute_workflow_diagnostics(wf, snapshot=None, store_inst=store)
+        wf["is_stuck"] = diag.get("is_stuck", False)
+        wf["stuck_reason"] = diag.get("stuck_reason")
+
+        if is_stuck is not None:
+            if is_stuck and not wf["is_stuck"]:
+                continue
+            if not is_stuck and wf["is_stuck"]:
+                continue
+
+        filtered.append(wf)
+
+    total = len(filtered)
+    paged = filtered[offset : offset + limit] if offset > 0 or limit < total else filtered[:limit]
+
+    return {
+        "workflows": paged,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
 
 
 @app.get("/api/workflows/{workflow_id}")
@@ -558,24 +616,22 @@ async def approve_workflow(
 
 
 # ---------------------------------------------------------------------------
-# Phase 6.5 Operability & Recovery Endpoints
+# Phase 6.5 & Phase 9 Operability & Operator Control Plane Endpoints
 # ---------------------------------------------------------------------------
 
 
-@app.get("/api/workflows/{workflow_id}/diagnostics")
-async def get_workflow_diagnostics(
-    workflow_id: str,
-    principal: Principal = Depends(get_current_principal),
-):
-    """
-    AUTHENTICATED endpoint: Analyze operational health, lease status, and stuck conditions.
-    """
-    wf = await _get_authorized_workflow(workflow_id, principal)
-    snapshot = await store.get_workflow_snapshot(workflow_id)
-    if not snapshot:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workflow not found")
+def compute_workflow_diagnostics(
+    wf: dict[str, Any],
+    snapshot: dict[str, Any] | None = None,
+    store_inst: BaseWorkflowStore | None = None,
+) -> dict[str, Any]:
+    """Helper computing operational health, age, claim status, and stuck classification."""
+    workflow_id = wf.get("workflow_id", "")
+    current_state = wf.get("state", "UNKNOWN")
+    version = wf.get("version", 1)
+    tenant_id = wf.get("tenant_id", "tenant-default")
 
-    events = snapshot.get("events", [])
+    events = snapshot.get("events", []) if snapshot else []
     now = datetime.now(timezone.utc)
 
     # Calculate age
@@ -590,14 +646,13 @@ async def get_workflow_diagnostics(
         except Exception:
             pass
 
-    # Check state & stuck conditions
-    current_state = wf.get("state", "UNKNOWN")
     is_terminal = current_state in (WorkflowState.COMPLETED.value, WorkflowState.ESCALATED.value)
 
-    # Check claim status in store if accessible
+    # Check operation claim status if available
     claim_info = None
-    if hasattr(store, "_operations") and isinstance(store._operations, dict):
-        for k, v in store._operations.items():
+    target_store = store_inst or store
+    if hasattr(target_store, "_operations") and isinstance(target_store._operations, dict):
+        for k, v in target_store._operations.items():
             if isinstance(v, dict) and v.get("workflow_id") == workflow_id:
                 claim_info = {
                     "idempotency_key": k,
@@ -632,9 +687,9 @@ async def get_workflow_diagnostics(
 
     return {
         "workflow_id": workflow_id,
-        "tenant_id": wf.get("tenant_id", "tenant-default"),
+        "tenant_id": tenant_id,
         "state": current_state,
-        "version": wf.get("version", 1),
+        "version": version,
         "age_seconds": round(age_seconds, 2),
         "is_terminal": is_terminal,
         "is_stuck": is_stuck,
@@ -643,6 +698,181 @@ async def get_workflow_diagnostics(
         "operation_claim": claim_info,
         "event_count": len(events),
         "last_event": events[-1] if events else None,
+    }
+
+
+@app.get("/api/workflows/{workflow_id}/diagnostics")
+async def get_workflow_diagnostics(
+    workflow_id: str,
+    principal: Principal = Depends(get_current_principal),
+):
+    """
+    AUTHENTICATED endpoint: Analyze operational health, lease status, and stuck conditions.
+    """
+    wf = await _get_authorized_workflow(workflow_id, principal)
+    snapshot = await store.get_workflow_snapshot(workflow_id)
+    if not snapshot:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workflow not found")
+
+    return compute_workflow_diagnostics(wf, snapshot=snapshot, store_inst=store)
+
+
+@app.get("/api/operator/overview")
+async def get_operator_overview(
+    principal: Principal = Depends(get_current_principal),
+):
+    """
+    AUTHENTICATED endpoint: Fleet health summary and workflow state counts.
+    """
+    tenant_filter = None if principal.role == Role.ADMIN else principal.tenant_id
+    workflows = await store.list_workflows(tenant_id=tenant_filter)
+
+    counts_by_state = {
+        "CREATED": 0,
+        "EXECUTING": 0,
+        "AWAITING_APPROVAL": 0,
+        "RECOVERING": 0,
+        "VERIFYING": 0,
+        "COMPLETED": 0,
+        "ESCALATED": 0,
+        "UNKNOWN": 0,
+    }
+
+    stuck_count = 0
+    for wf in workflows:
+        st = wf.get("state", "UNKNOWN")
+        if st in counts_by_state:
+            counts_by_state[st] += 1
+        else:
+            counts_by_state["UNKNOWN"] += 1
+
+        diag = compute_workflow_diagnostics(wf, snapshot=None, store_inst=store)
+        if diag.get("is_stuck"):
+            stuck_count += 1
+
+    # Count pending approvals
+    pending_approvals = 0
+    for wf in workflows:
+        wf_id = wf.get("workflow_id")
+        if wf_id and wf.get("state") == WorkflowState.AWAITING_APPROVAL.value:
+            approvals = await store.get_pending_approvals(wf_id)
+            pending_approvals += len(approvals)
+
+    return {
+        "tenant_id": principal.tenant_id,
+        "role": principal.role.value,
+        "total_workflows": len(workflows),
+        "counts_by_state": counts_by_state,
+        "stuck_count": stuck_count,
+        "pending_approvals_count": pending_approvals,
+        "system_status": "HEALTHY",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.get("/api/operator/stuck-workflows")
+async def list_stuck_workflows(
+    principal: Principal = Depends(get_current_principal),
+):
+    """
+    AUTHENTICATED endpoint: Discover all stuck/stalled workflows across tenant.
+    """
+    tenant_filter = None if principal.role == Role.ADMIN else principal.tenant_id
+    workflows = await store.list_workflows(tenant_id=tenant_filter)
+
+    stuck_list = []
+    for wf in workflows:
+        snapshot = await store.get_workflow_snapshot(wf.get("workflow_id", ""))
+        diag = compute_workflow_diagnostics(wf, snapshot=snapshot, store_inst=store)
+        if diag.get("is_stuck"):
+            stuck_list.append(diag)
+
+    return {
+        "stuck_workflows": stuck_list,
+        "total": len(stuck_list),
+        "tenant_id": principal.tenant_id,
+    }
+
+
+@app.post("/api/workflows/{workflow_id}/cancel")
+async def cancel_workflow(
+    workflow_id: str,
+    request: WorkflowCancelRequest = WorkflowCancelRequest(),
+    principal: Principal = Depends(require_role(Role.OPERATOR, Role.ADMIN)),
+):
+    """
+    OPERATOR / ADMIN endpoint: Gracefully cancel/escalate an active or stuck workflow.
+    Enforces terminal state guards and logs an immutable audit event.
+    """
+    wf = await _get_authorized_workflow(workflow_id, principal)
+    current_state = wf.get("state")
+
+    if current_state == WorkflowState.COMPLETED.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot cancel a COMPLETED workflow; terminal states are immutable.",
+        )
+    if current_state == WorkflowState.ESCALATED.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Workflow is already in ESCALATED state.",
+        )
+
+    current_version = wf.get("version", 1)
+
+    # Transition to ESCALATED
+    await engine.transition(
+        workflow_id=workflow_id,
+        new_state=WorkflowState.ESCALATED,
+        detail=f"Operator '{principal.user_id}' cancelled workflow: {request.reason}",
+        actor=f"operator-{principal.user_id}",
+    )
+
+    record_security_audit_event(
+        event_type="CANCEL_TRIGGERED",
+        actor_id=principal.user_id,
+        role=principal.role.value,
+        tenant_id=principal.tenant_id,
+        workflow_id=workflow_id,
+        action="cancel_workflow",
+        outcome="SUCCESS",
+        reason=request.reason,
+        extra={"previous_state": current_state, "previous_version": current_version},
+    )
+
+    return {
+        "status": "workflow_cancelled",
+        "workflow_id": workflow_id,
+        "state": WorkflowState.ESCALATED.value,
+        "cancelled_by": principal.user_id,
+        "reason": request.reason,
+    }
+
+
+@app.get("/api/audit/logs")
+async def list_audit_logs(
+    workflow_id: Optional[str] = None,
+    event_type: Optional[str] = None,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    principal: Principal = Depends(require_role(Role.OPERATOR, Role.ADMIN)),
+):
+    """
+    OPERATOR / ADMIN endpoint: Query persistent security and operator audit trail.
+    """
+    tenant_filter = "all" if principal.role == Role.ADMIN else principal.tenant_id
+    logs = await store.list_audit_events(
+        tenant_id=tenant_filter,
+        workflow_id=workflow_id,
+        event_type=event_type,
+        limit=limit,
+        offset=offset,
+    )
+    return {
+        "audit_logs": logs,
+        "total": len(logs),
+        "limit": limit,
+        "offset": offset,
     }
 
 
