@@ -281,4 +281,10 @@ class WorkflowEngine:
             payload=payload or {},
             actor=actor,
         )
-        await self._store.append_event(workflow_id, event.model_dump(mode="json"))
+        event_dict = event.model_dump(mode="json")
+        await self._store.append_event(workflow_id, event_dict)
+        try:
+            from backend.events.broadcast import event_broadcaster
+            await event_broadcaster.broadcast(workflow_id, event_dict)
+        except Exception:
+            pass

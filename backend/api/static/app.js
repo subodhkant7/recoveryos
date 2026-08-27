@@ -21,7 +21,7 @@ const state = {
   autoRefreshInterval: 15000,
 };
 
-// Persona Token Mapping (Generates valid client-side HMAC test tokens for dev/demo)
+// Persona Token Mapping
 const PERSONAS = {
   operator: { user_id: 'operator-1', role: 'operator', name: 'Operator (operator-1)' },
   admin: { user_id: 'admin-1', role: 'admin', name: 'Administrator (admin-1)' },
@@ -33,28 +33,57 @@ const PERSONAS = {
 // API Client & Token Management
 // ==========================================================================
 
-function getAuthHeaders() {
+async function ensureAuthToken() {
   const p = PERSONAS[state.currentPersona] || PERSONAS.operator;
-  // Encode mock JWT payload matching backend Principal extraction
-  // Format: header.payload.signature
-  const header = btoa(JSON.stringify({ alg: "HS256", typ: "JWT" }));
-  const payload = btoa(JSON.stringify({
-    sub: p.user_id,
-    role: p.role,
-    tenant_id: state.currentTenant === 'all' ? 'tenant-default' : state.currentTenant,
-    exp: Math.floor(Date.now() / 1000) + 3600,
-  }));
-  const mockJwt = `${header}.${payload}.mock_dev_signature`;
+  const targetTenant = state.currentTenant === 'all' ? 'tenant-default' : state.currentTenant;
+  const cacheKey = `token_${p.role}_${targetTenant}`;
+  
+  let token = sessionStorage.getItem(cacheKey);
+  if (!token) {
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: p.user_id,
+          role: p.role,
+          tenant_id: targetTenant,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        token = data.access_token;
+        sessionStorage.setItem(cacheKey, token);
+      }
+    } catch (err) {
+      console.warn('Failed to obtain signed token from backend, falling back to mock:', err);
+    }
+  }
 
-  return {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${mockJwt}`,
-    'X-Tenant-ID': state.currentTenant,
-  };
+  if (!token) {
+    const header = btoa(JSON.stringify({ alg: "HS256", typ: "JWT" }));
+    const payload = btoa(JSON.stringify({
+      sub: p.user_id,
+      role: p.role,
+      tenant_id: targetTenant,
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    }));
+    token = `${header}.${payload}.dev_local_token`;
+  }
+
+  state.jwtToken = token;
+  return token;
 }
 
 async function apiFetch(url, options = {}) {
-  const headers = { ...getAuthHeaders(), ...(options.headers || {}) };
+  const token = await ensureAuthToken();
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`,
+    'X-Tenant-ID': state.currentTenant,
+    ...(options.headers || {}),
+  };
+
   try {
     const res = await fetch(url, { ...options, headers });
     if (!res.ok) {
@@ -63,6 +92,10 @@ async function apiFetch(url, options = {}) {
     }
     return await res.json();
   } catch (err) {
+    console.error(`[API Error] ${url}:`, err);
+    throw err;
+  }
+}
     console.error(`[API Error] ${url}:`, err);
     throw err;
   }
@@ -470,7 +503,7 @@ function renderDrawerDetails(snapshot) {
   `).join('');
 }
 
-function connectEventStream(workflowId) {
+async function connectEventStream(workflowId) {
   if (state.eventSource) {
     state.eventSource.close();
   }
@@ -479,8 +512,9 @@ function connectEventStream(workflowId) {
   const pulse = document.getElementById('stream-pulse-indicator');
   pulse.style.background = 'var(--color-cyan)';
 
-  // SSE connection with JWT via subprotocol/auth endpoint
-  state.eventSource = new EventSource(`/api/workflows/${workflowId}/events/stream`);
+  const token = await ensureAuthToken();
+  // SSE connection with JWT via token query parameter
+  state.eventSource = new EventSource(`/api/workflows/${workflowId}/events/stream?token=${encodeURIComponent(token)}`);
 
   state.eventSource.onmessage = (e) => {
     try {

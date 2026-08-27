@@ -52,6 +52,10 @@ def get_store() -> BaseWorkflowStore:
 
 
 from backend.engine.workflow_engine import WorkflowEngine
+from backend.engine.policy_engine import PolicyEngine
+from backend.simulation.failure_injector import FailureInjector
+from backend.simulation.external_services import SimulatedServices
+from backend.agents.agent_factory import AgentFactory
 
 
 def get_worker_service() -> WorkflowWorkerService:
@@ -59,7 +63,16 @@ def get_worker_service() -> WorkflowWorkerService:
     if _worker_service is None:
         store = get_store()
         engine = WorkflowEngine(store)
-        consumer = WorkflowEventConsumer(store=store, engine=engine)
+        injector = FailureInjector()
+        services = SimulatedServices(injector)
+        policy_engine = PolicyEngine()
+        agent_factory = AgentFactory(store, engine, services, policy_engine)
+        consumer = WorkflowEventConsumer(
+            store=store,
+            engine=engine,
+            agent_factory=agent_factory,
+            worker_id=f"worker-{config.environment}",
+        )
         validator = DefaultWorkerSecurityValidator()
         _worker_service = WorkflowWorkerService(
             consumer=consumer,

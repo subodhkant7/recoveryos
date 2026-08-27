@@ -50,10 +50,14 @@ class ConsumerExecutionError(Exception):
     pass
 
 
+from backend.engine.agent_runner import run_workflow_agent
+from backend.agents.agent_factory import AgentFactory
+
+
 class WorkflowEventConsumer:
     """
     Consumer handler for workflow execution messages.
-    Validates contracts and delegates safely to the deterministic engine.
+    Validates contracts and delegates safely to the deterministic engine and agent runner.
     """
 
     def __init__(
@@ -61,11 +65,13 @@ class WorkflowEventConsumer:
         store: BaseWorkflowStore,
         engine: WorkflowEngine,
         worker_id: str = "worker-default",
+        agent_factory: AgentFactory | None = None,
         test_failure_hook: Callable[[str, WorkflowExecutionMessage], None] | None = None,
     ):
         self._store = store
         self._engine = engine
         self._worker_id = worker_id
+        self._agent_factory = agent_factory
         self._test_failure_hook = test_failure_hook
 
     async def consume_raw_message(self, raw_json: str | bytes) -> dict[str, Any]:
@@ -221,8 +227,9 @@ class WorkflowEventConsumer:
             )
 
         # ------------------------------------------------------------------
-        # 5. Delegate to Workflow Engine State Machine
+        # 5. Delegate to Workflow Engine & Agent Execution Runner
         # ------------------------------------------------------------------
+        agent_result: dict[str, Any] = {"status": "STATE_ONLY"}
         if message.event_type in (
             WorkflowEventType.WORKFLOW_DISPATCH,
             WorkflowEventType.APPROVAL_RESUME,
@@ -244,6 +251,22 @@ class WorkflowEventConsumer:
                     actor=message.producer_id,
                 )
 
+            # If AgentFactory is attached, execute the autonomous agent loop
+            if self._agent_factory:
+                logger.info(
+                    "Executing agent runner in asynchronous worker",
+                    extra={
+                        "workflow_id": message.workflow_id,
+                        "worker_id": self._worker_id,
+                    },
+                )
+                agent_result = await run_workflow_agent(
+                    workflow_id=message.workflow_id,
+                    store=self._store,
+                    engine=self._engine,
+                    agent_factory=self._agent_factory,
+                )
+
         # Optional test hook after state transition
         if self._test_failure_hook:
             self._test_failure_hook("after_transition", message)
@@ -251,7 +274,7 @@ class WorkflowEventConsumer:
         # Mark the operation claim as COMPLETED so redeliveries are skipped
         await self._store.complete_operation(
             idempotency_key=message.idempotency_key,
-            result={"status": "PROCESSED", "message_id": message.message_id},
+            result={"status": "PROCESSED", "message_id": message.message_id, "agent_result": agent_result},
             worker_id=self._worker_id,
         )
 
@@ -266,6 +289,7 @@ class WorkflowEventConsumer:
                 "workflow_id": message.workflow_id,
                 "message_id": message.message_id,
                 "event_type": message.event_type.value,
+                "agent_status": agent_result.get("status"),
             },
         )
 
@@ -276,4 +300,5 @@ class WorkflowEventConsumer:
             "event_type": message.event_type.value,
             "tenant_id": message.tenant_id,
             "version": current_version + 1,
+            "agent_result": agent_result,
         }

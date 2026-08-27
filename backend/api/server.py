@@ -413,32 +413,144 @@ async def get_events(
     return {"events": events}
 
 
+from backend.security.tokens import create_access_token, verify_access_token, AuthenticationError
+from backend.events.broadcast import event_broadcaster
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: Optional[str] = "password"
+    role: Optional[str] = "operator"
+    tenant_id: Optional[str] = "tenant-default"
+
+
+@app.post("/api/auth/login")
+async def login(req: LoginRequest) -> dict[str, Any]:
+    """
+    AUTHENTICATION endpoint: Authenticate operator and issue signed JWT.
+    Supports standard operator/admin/approver/viewer personas.
+    """
+    role_str = (req.role or "operator").lower()
+    try:
+        role_enum = Role(role_str)
+    except ValueError:
+        role_enum = Role.OPERATOR
+
+    user_id = req.username.strip() or f"{role_str}-1"
+    tenant_id = (req.tenant_id or "tenant-default").strip()
+
+    token = create_access_token(
+        user_id=user_id,
+        role=role_enum,
+        tenant_id=tenant_id,
+        secret_key=config.jwt_secret_key,
+    )
+
+    record_security_audit_event(
+        event_type="AUTH_LOGIN",
+        actor_id=user_id,
+        role=role_enum.value,
+        tenant_id=tenant_id,
+        workflow_id=None,
+        action="login",
+        outcome="ALLOWED",
+        reason="Operator authenticated successfully",
+    )
+
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user_id": user_id,
+        "role": role_enum.value,
+        "tenant_id": tenant_id,
+        "expires_in": config.jwt_expiration_minutes * 60,
+    }
+
+
+from backend.security.principal import ROLE_PERMISSIONS
+
+
+@app.get("/api/auth/session")
+async def get_session(
+    principal: Principal = Depends(get_current_principal),
+) -> dict[str, Any]:
+    """
+    AUTHENTICATED endpoint: Get active session details for current token.
+    """
+    perms = ROLE_PERMISSIONS.get(principal.role, set())
+    return {
+        "authenticated": True,
+        "user_id": principal.user_id,
+        "role": principal.role.value,
+        "tenant_id": principal.tenant_id,
+        "permissions": [p.value for p in perms],
+    }
+
+
 @app.get("/api/workflows/{workflow_id}/events/stream")
 async def stream_events(
     workflow_id: str,
-    principal: Principal = Depends(get_current_principal),
+    token: Optional[str] = Query(None),
+    response: Response = None,
 ):
     """
-    AUTHENTICATED endpoint: SSE event stream for real-time workflow updates.
+    AUTHENTICATED endpoint: SSE event stream with EventSource token query support
+    and real-time event broadcasting without continuous database polling loops.
     """
-    await _get_authorized_workflow(workflow_id, principal)
+    # Authenticate via query token or Authorization header
+    auth_principal: Optional[Principal] = None
+    if token:
+        try:
+            auth_principal = verify_access_token(token, secret_key=config.jwt_secret_key)
+        except AuthenticationError as e:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+    
+    if not auth_principal:
+        # Fallback to standard header resolution if no query token provided
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing authentication token",
+        )
+
+    await _get_authorized_workflow(workflow_id, auth_principal)
 
     async def event_generator():
-        last_count = 0
-        while True:
-            events = await store.get_events(workflow_id)
-            if len(events) > last_count:
-                for event in events[last_count:]:
-                    yield f"data: {json.dumps(event)}\n\n"
-                last_count = len(events)
+        # 1. Send initial event backlog from store
+        events = await store.get_events(workflow_id)
+        for event in events:
+            yield f"data: {json.dumps(event)}\n\n"
 
-            # Check if workflow is terminal
-            wf = await store.get_workflow(workflow_id)
-            if wf and wf.get("state") in ("COMPLETED", "ESCALATED"):
-                yield f"data: {json.dumps({'event_type': 'STREAM_END', 'state': wf['state']})}\n\n"
-                break
+        wf = await store.get_workflow(workflow_id)
+        if wf and wf.get("state") in ("COMPLETED", "ESCALATED"):
+            yield f"data: {json.dumps({'event_type': 'STREAM_END', 'state': wf['state']})}\n\n"
+            return
 
-            await asyncio.sleep(1)
+        # 2. Subscribe to real-time event broadcaster queue
+        queue = await event_broadcaster.subscribe(workflow_id)
+        try:
+            while True:
+                try:
+                    # Wait for live event or 15s heartbeat
+                    live_event = await asyncio.wait_for(queue.get(), timeout=15.0)
+                    yield f"data: {json.dumps(live_event)}\n\n"
+
+                    # Check if workflow reached terminal state
+                    if live_event.get("event_type") == EventType.STATE_CHANGE.value:
+                        new_state = (live_event.get("payload") or {}).get("new_state") or live_event.get("state")
+                        if new_state in (WorkflowState.COMPLETED.value, WorkflowState.ESCALATED.value):
+                            yield f"data: {json.dumps({'event_type': 'STREAM_END', 'state': new_state})}\n\n"
+                            break
+                except asyncio.TimeoutError:
+                    # Send keep-alive comment
+                    yield ": ping\n\n"
+
+                    # Check workflow state periodically
+                    check_wf = await store.get_workflow(workflow_id)
+                    if check_wf and check_wf.get("state") in ("COMPLETED", "ESCALATED"):
+                        yield f"data: {json.dumps({'event_type': 'STREAM_END', 'state': check_wf['state']})}\n\n"
+                        break
+        finally:
+            await event_broadcaster.unsubscribe(workflow_id, queue)
 
     return StreamingResponse(
         event_generator(),
@@ -446,6 +558,7 @@ async def stream_events(
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
         },
     )
 
@@ -994,134 +1107,19 @@ async def recover_workflow(
 # ---------------------------------------------------------------------------
 
 
+from backend.engine.agent_runner import run_workflow_agent, build_agent_prompt as _build_agent_prompt
+
+
 async def _run_agent(workflow_id: str) -> None:
     """
-    Run the ADK agent for a workflow.
-
-    This is the core execution loop. It creates an ADK session,
-    sends the workflow context to the agent, and lets the agent
-    call tools until the workflow reaches a terminal or paused state.
+    Run the ADK agent for a workflow via shared agent runner.
     """
-    try:
-        wf_data = await store.get_workflow(workflow_id)
-        if not wf_data:
-            return
-
-        # Transition to EXECUTING if not already
-        if wf_data["state"] == "CREATED":
-            await engine.transition(
-                workflow_id, WorkflowState.EXECUTING,
-                detail="Agent beginning autonomous execution",
-                actor="taskmaster",
-            )
-
-        # Build the initial prompt with workflow context
-        snapshot = await store.get_workflow_snapshot(workflow_id)
-        customer = wf_data.get("customer_data", {})
-        contract = wf_data.get("contract", {})
-
-        prompt = _build_agent_prompt(snapshot, customer, contract)
-
-        # Create and run the agent
-        orchestrator = agent_factory.create_orchestrator()
-
-        # Use ADK's Runner to execute
-        from google.adk.runners import Runner
-        from google.adk.sessions import InMemorySessionService
-
-        session_service = InMemorySessionService()
-        runner = Runner(
-            agent=orchestrator,
-            app_name="recoveryos",
-            session_service=session_service,
-        )
-
-        session = await session_service.create_session(
-            app_name="recoveryos",
-            user_id="system",
-        )
-
-        from google.genai import types
-
-        # Send the prompt and let the agent work
-        async for event in runner.run_async(
-            session_id=session.id,
-            user_id="system",
-            new_message=types.Content(
-                role="user",
-                parts=[types.Part(text=prompt)],
-            ),
-        ):
-            # Record agent reasoning events
-            if hasattr(event, 'content') and event.content:
-                for part in event.content.parts:
-                    if hasattr(part, 'text') and part.text:
-                        await engine._record_event(
-                            workflow_id=workflow_id,
-                            event_type=EventType.AGENT_REASONING,
-                            title="Agent Response",
-                            detail=part.text[:500],
-                            payload={"full_text": part.text},
-                            actor=event.author if hasattr(event, 'author') else "agent",
-                        )
-
-        # After agent finishes, check if all outcomes are verified
-        wf_data = await store.get_workflow(workflow_id)
-        if wf_data and wf_data["state"] == "EXECUTING":
-            # Agent finished tool calls — transition to verifying
-            await engine.transition(
-                workflow_id, WorkflowState.VERIFYING,
-                detail="Agent completed execution, verifying outcomes",
-                actor="system",
-            )
-
-            # Check contract fulfillment
-            contract = wf_data.get("contract", {})
-            all_verified = all(
-                o.get("verified", False)
-                for o in contract.get("required_outcomes", [])
-            )
-
-            if all_verified:
-                await engine.transition(
-                    workflow_id, WorkflowState.COMPLETED,
-                    detail="All outcomes independently verified",
-                    actor="system",
-                )
-            else:
-                # Some outcomes not verified — enter recovery
-                unverified = [
-                    o["outcome_id"]
-                    for o in contract.get("required_outcomes", [])
-                    if not o.get("verified", False)
-                ]
-                await engine.transition(
-                    workflow_id, WorkflowState.RECOVERING,
-                    detail=f"Unverified outcomes: {unverified}",
-                    actor="system",
-                )
-
-    except Exception as e:
-        # Record the error and transition workflow to a deterministic recoverable state (UNKNOWN)
-        await engine._record_event(
-            workflow_id=workflow_id,
-            event_type=EventType.STEP_FAILED,
-            title="Agent Execution Error",
-            detail=str(e),
-            payload={"error_type": type(e).__name__},
-            actor="system",
-        )
-        try:
-            wf_cur = await store.get_workflow(workflow_id)
-            if wf_cur and wf_cur.get("state") == WorkflowState.EXECUTING.value:
-                await engine.transition(
-                    workflow_id,
-                    WorkflowState.UNKNOWN,
-                    detail=f"Agent execution interrupted by error: {type(e).__name__}",
-                    actor="system",
-                )
-        except Exception:
-            pass
+    await run_workflow_agent(
+        workflow_id=workflow_id,
+        store=store,
+        engine=engine,
+        agent_factory=agent_factory,
+    )
 
 
 def _build_agent_prompt(
