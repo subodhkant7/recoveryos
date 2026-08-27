@@ -1,0 +1,82 @@
+{
+  "audit_timestamp": "2026-08-27T14:34:00Z",
+  "project_id": "recoveryos-506713",
+  "region": "asia-east1",
+  "git_commit": "8d5fca7494e57ecd5a2335d9fdd40059a2e962a4",
+  "candidate_image_digest": "sha256:cb43b57e04b208edd9e74f68e7e8d4dfb9bc96acf9012850ba2bcb406c71f13f",
+  "production": {
+    "api": {
+      "service_name": "recoveryos",
+      "active_revision": "recoveryos-00019-vog",
+      "traffic_percent": 100,
+      "rollback_reserve_revision": "recoveryos-00008-2bt",
+      "image": "asia-east1-docker.pkg.dev/recoveryos-506713/recoveryos/recoveryos@sha256:cb43b57e04b208edd9e74f68e7e8d4dfb9bc96acf9012850ba2bcb406c71f13f",
+      "service_account": "recoveryos-runtime@recoveryos-506713.iam.gserviceaccount.com",
+      "concurrency": 80,
+      "cpu": "1",
+      "memory": "512Mi",
+      "ingress": "all",
+      "secrets": [
+        "recoveryos-jwt-secret",
+        "recoveryos-gemini-key"
+      ],
+      "env": {
+        "ENVIRONMENT": "production",
+        "PERSISTENCE_BACKEND": "firestore",
+        "FIRESTORE_DATABASE": "recoveryosdb",
+        "EVENT_PUBLISHER_BACKEND": "pubsub",
+        "PUBSUB_TOPIC": "recoveryos-workflow-execution",
+        "CORS_ALLOW_ORIGINS": "https://recoveryos-321161003794.asia-east1.run.app"
+      }
+    },
+    "worker": {
+      "service_name": "recoveryos-worker",
+      "active_revision": "recoveryos-worker-00009-829",
+      "traffic_percent": 100,
+      "rollback_reserve_revision": "recoveryos-worker-00008-5pv",
+      "image": "asia-east1-docker.pkg.dev/recoveryos-506713/recoveryos/recoveryos@sha256:cb43b57e04b208edd9e74f68e7e8d4dfb9bc96acf9012850ba2bcb406c71f13f",
+      "service_account": "recoveryos-runtime@recoveryos-506713.iam.gserviceaccount.com",
+      "concurrency": 10,
+      "cpu": "1",
+      "memory": "1Gi",
+      "ingress": "all",
+      "secrets": [
+        "recoveryos-jwt-secret",
+        "recoveryos-gemini-key"
+      ],
+      "env": {
+        "ENVIRONMENT": "production",
+        "PERSISTENCE_BACKEND": "firestore",
+        "FIRESTORE_DATABASE": "recoveryosdb"
+      }
+    },
+    "pubsub": {
+      "topic": "projects/recoveryos-506713/topics/recoveryos-workflow-execution",
+      "worker_subscription": "projects/recoveryos-506713/subscriptions/recoveryos-workflow-execution-worker",
+      "push_endpoint": "https://recoveryos-worker-321161003794.asia-east1.run.app/",
+      "dlq_topic": "projects/recoveryos-506713/topics/recoveryos-workflow-execution-dlq",
+      "dlq_subscription": "projects/recoveryos-506713/subscriptions/recoveryos-workflow-execution-dlq-sub",
+      "max_delivery_attempts": 5,
+      "ack_deadline_seconds": 60
+    }
+  },
+  "staging": {
+    "api": {
+      "service_name": "recoveryos-stage",
+      "active_revision": "recoveryos-stage-00001-mzc",
+      "traffic_percent": 100
+    },
+    "worker": {
+      "service_name": "recoveryos-worker-stage",
+      "active_revision": "recoveryos-worker-stage-00001-pnk",
+      "traffic_percent": 100
+    },
+    "pubsub": {
+      "topic": "projects/recoveryos-506713/topics/recoveryos-workflow-execution-stage",
+      "worker_subscription": "projects/recoveryos-506713/subscriptions/recoveryos-workflow-execution-worker-stage",
+      "push_endpoint": "https://recoveryos-worker-stage-321161003794.asia-east1.run.app/",
+      "dlq_topic": "projects/recoveryos-506713/topics/recoveryos-workflow-execution-dlq-stage",
+      "dlq_subscription": "projects/recoveryos-506713/subscriptions/recoveryos-workflow-execution-dlq-sub-stage"
+    }
+  }
+}

@@ -1,829 +1,1095 @@
 /**
- * RecoveryOS Operator Control Plane — Frontend Application Logic
- * Zero-dependency, modern Vanilla JS ES Modules architecture.
+ * RecoveryOS Autonomous Operations Command Center — Client Application
+ * Phase 30: Unified Authoritative State Model & Deterministic Event Machine.
+ * Zero-dependency, modern ES Modules architecture.
  */
 
-// Application State
-const state = {
-  activeTab: 'fleet',
-  currentPersona: 'operator',
-  currentTenant: 'tenant-default',
-  workflows: [],
-  totalWorkflows: 0,
-  stuckWorkflows: [],
-  auditLogs: [],
-  pageLimit: 25,
-  pageOffset: 0,
+// Authoritative Single Frontend State Model
+const appState = {
+  auth: {
+    persona: 'operator',
+    tenant: 'tenant-default',
+    token: null,
+  },
+  workflow: null,
   activeWorkflowId: null,
-  activeWorkflowSnapshot: null,
+  snapshot: null,
+  events: [],
+  seenEventIds: new Set(),  // Phase 31: event deduplication
+  activeStage: null,
+  workflowStatus: 'IDLE',
+  connection: 'IDLE',
+  approval: null,
+  isDemoMode: false,
+  replay: {
+    active: false,
+    timer: null,
+    currentIndex: 0,
+    events: [],
+  },
+  workflowsList: [],
+  activeFilter: 'all',
   eventSource: null,
   autoRefreshTimer: null,
-  autoRefreshInterval: 15000,
 };
 
-// Persona Token Mapping
+// Available Personas with server-side credential binding
 const PERSONAS = {
-  operator: { user_id: 'operator-1', role: 'operator', name: 'Operator (operator-1)' },
-  admin: { user_id: 'admin-1', role: 'admin', name: 'Administrator (admin-1)' },
-  approver: { user_id: 'approver-1', role: 'approver', name: 'Approver (approver-1)' },
-  viewer: { user_id: 'viewer-1', role: 'viewer', name: 'Auditor (viewer-1)' },
+  operator: { username: 'operator', role: 'operator', name: 'operator-1' },
+  admin: { username: 'admin', role: 'admin', name: 'admin-1' },
+  approver: { username: 'approver', role: 'approver', name: 'approver-1' },
+  viewer: { username: 'viewer', role: 'viewer', name: 'viewer-1' },
 };
 
 // ==========================================================================
-// API Client & Token Management
+// 1. Authentication & API Client
 // ==========================================================================
 
-async function ensureAuthToken() {
-  const p = PERSONAS[state.currentPersona] || PERSONAS.operator;
-  const targetTenant = state.currentTenant === 'all' ? 'tenant-default' : state.currentTenant;
-  const cacheKey = `token_${p.role}_${targetTenant}`;
-  
+async function getAuthToken() {
+  const p = PERSONAS[appState.auth.persona] || PERSONAS.operator;
+  const cacheKey = `rec_jwt_${p.username}_${appState.auth.tenant}`;
   let token = sessionStorage.getItem(cacheKey);
+
   if (!token) {
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          username: p.user_id,
+          username: p.username,
           role: p.role,
-          tenant_id: targetTenant,
+          tenant_id: appState.auth.tenant,
         }),
       });
+
       if (res.ok) {
         const data = await res.json();
         token = data.access_token;
         sessionStorage.setItem(cacheKey, token);
       }
     } catch (err) {
-      console.warn('Failed to obtain signed token from backend, falling back to mock:', err);
+      console.warn('Auth request failed, using fallback token:', err);
     }
   }
 
-  if (!token) {
-    const header = btoa(JSON.stringify({ alg: "HS256", typ: "JWT" }));
-    const payload = btoa(JSON.stringify({
-      sub: p.user_id,
-      role: p.role,
-      tenant_id: targetTenant,
-      exp: Math.floor(Date.now() / 1000) + 3600,
-    }));
-    token = `${header}.${payload}.dev_local_token`;
-  }
-
-  state.jwtToken = token;
+  appState.auth.token = token;
   return token;
 }
 
 async function apiFetch(url, options = {}) {
-  const token = await ensureAuthToken();
+  const token = await getAuthToken();
   const headers = {
     'Content-Type': 'application/json',
-    'Authorization': `Bearer ${token}`,
-    'X-Tenant-ID': state.currentTenant,
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    'X-Tenant-ID': appState.auth.tenant,
     ...(options.headers || {}),
   };
 
-  try {
-    const res = await fetch(url, { ...options, headers });
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => ({ detail: res.statusText }));
-      throw new Error(errorData.detail || `HTTP ${res.status}: ${res.statusText}`);
+  const res = await fetch(url, { ...options, headers });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(errData.detail || `HTTP ${res.status}`);
+  }
+  return await res.json();
+}
+
+// ==========================================================================
+// 2. Authoritative Helpers (MTTR, Normalization, Sanitization)
+// ==========================================================================
+
+function calculateWorkflowDuration(createdAt, completedAt) {
+  if (!createdAt) return '0.0s';
+  const start = new Date(createdAt).getTime();
+  const end = completedAt ? new Date(completedAt).getTime() : Date.now();
+  if (isNaN(start) || isNaN(end) || end < start) return '0.0s';
+  const diffSec = Math.max(0.1, (end - start) / 1000);
+  return `${diffSec.toFixed(1)}s`;
+}
+
+function normalizeWorkflowEvent(rawEvent) {
+  const evType = (rawEvent.event_type || rawEvent.type || '').toUpperCase();
+  const actor = (rawEvent.actor || 'system').toLowerCase();
+  const title = rawEvent.title || rawEvent.name || evType;
+  const detail = rawEvent.detail || (rawEvent.payload ? JSON.stringify(rawEvent.payload) : '');
+  const stateVal = rawEvent.state || (rawEvent.payload && rawEvent.payload.new_state);
+
+  let stage = null;
+  let actorLabel = 'SYSTEM';
+  let actorClass = 'actor-system';
+
+  if (actor.includes('detect') || title.toLowerCase().includes('detect') || title.toLowerCase().includes('fail') || evType.includes('FAIL')) {
+    stage = 'detect';
+    actorLabel = 'DETECT';
+    actorClass = 'actor-detect';
+  } else if (actor.includes('reason') || title.toLowerCase().includes('diagnos') || title.toLowerCase().includes('plan')) {
+    stage = 'reason';
+    actorLabel = 'REASON';
+    actorClass = 'actor-reason';
+  } else if (actor.includes('recover') || title.toLowerCase().includes('switch') || title.toLowerCase().includes('execut') || evType.includes('STEP')) {
+    stage = 'recover';
+    actorLabel = 'ACT';
+    actorClass = 'actor-recover';
+  } else if (actor.includes('verify') || title.toLowerCase().includes('verif') || evType.includes('VERIF')) {
+    stage = 'verify';
+    actorLabel = 'VERIFY';
+    actorClass = 'actor-verify';
+  } else if (stateVal === 'COMPLETED' || evType === 'OUTCOME_VERIFIED' || title.includes('Completed')) {
+    stage = 'recovered';
+    actorLabel = 'VERIFY';
+    actorClass = 'actor-verify';
+  }
+
+  return {
+    raw: rawEvent,
+    eventType: evType,
+    stage,
+    actorLabel,
+    actorClass,
+    title,
+    detail,
+    state: stateVal,
+    payload: rawEvent.payload || {},
+  };
+}
+
+// ==========================================================================
+// 3. Deterministic Event Application Machine
+// ==========================================================================
+
+function applyWorkflowEvent(normalizedEvent) {
+  // Phase 31: Event deduplication — skip already-seen events
+  const evId = normalizedEvent.raw.event_id || normalizedEvent.raw.id;
+  if (evId) {
+    if (appState.seenEventIds.has(evId)) return;
+    appState.seenEventIds.add(evId);
+  }
+
+  appState.events.push(normalizedEvent.raw);
+  updateEventCount();
+
+  // Log to terminal
+  appendTerminalLine(
+    normalizedEvent.actorLabel,
+    `${normalizedEvent.title}: ${normalizedEvent.detail}`,
+    normalizedEvent.actorClass
+  );
+
+  // Stage illuminations
+  if (normalizedEvent.stage === 'detect') {
+    illuminateNode('detect', 'Signal Observed');
+    updateStoryLifecycle(1);
+  } else if (normalizedEvent.stage === 'reason') {
+    illuminateNode('reason', 'Hypothesis Formulated');
+    updateStoryLifecycle(2);
+  } else if (normalizedEvent.stage === 'recover') {
+    illuminateNode('recover', 'Tool Action Executed');
+    updateStoryLifecycle(4);
+
+    const p = normalizedEvent.payload;
+    const toolName = p.tool_name || normalizedEvent.raw.tool_name || 'switch_payment_gateway';
+    const toolArgs = p.tool_args || p.args || { provider: 'adyen', reason: 'primary_provider_outage' };
+    const idempKey = p.idempotency_key || `op_dispatch_${appState.activeWorkflowId?.slice(0, 4)}`;
+    showToolExecution(toolName, toolArgs, idempKey);
+  } else if (normalizedEvent.stage === 'verify') {
+    illuminateNode('verify', 'Criteria Confirmed');
+    updateStoryLifecycle(5);
+  }
+
+  // Handle state transitions defensively
+  if (normalizedEvent.state) {
+    handleWorkflowStateChange(normalizedEvent.state);
+  }
+
+  if (normalizedEvent.eventType === 'OUTCOME_VERIFIED' || normalizedEvent.title.includes('Verified')) {
+    markCriteriaVerified(normalizedEvent.payload.outcome_id || normalizedEvent.title);
+  }
+
+  if (normalizedEvent.state === 'COMPLETED' || normalizedEvent.eventType === 'STREAM_END') {
+    illuminateNode('recovered', 'Outcome Verified');
+    updateStoryLifecycle(6);
+    const stageLbl = document.getElementById('graph-stage-label');
+    if (stageLbl) {
+      stageLbl.textContent = '✓ SYSTEM RECOVERED AUTONOMOUSLY';
+      stageLbl.style.color = 'var(--emerald-core)';
     }
-    return await res.json();
-  } catch (err) {
-    console.error(`[API Error] ${url}:`, err);
-    throw err;
-  }
-}
-    console.error(`[API Error] ${url}:`, err);
-    throw err;
-  }
-}
-
-// ==========================================================================
-// Toast Notifications
-// ==========================================================================
-
-function showToast(message, type = 'info') {
-  const container = document.getElementById('toast-container');
-  const toast = document.createElement('div');
-  toast.className = `toast ${type}`;
-  toast.innerHTML = `
-    <span>${message}</span>
-  `;
-  container.appendChild(toast);
-  setTimeout(() => {
-    toast.remove();
-  }, 4000);
-}
-
-// ==========================================================================
-// Tab Switching
-// ==========================================================================
-
-function initTabs() {
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const targetTab = btn.dataset.tab;
-      switchTab(targetTab);
-    });
-  });
-}
-
-function switchTab(tabName) {
-  state.activeTab = tabName;
-  document.querySelectorAll('.tab-btn').forEach(b => {
-    b.classList.toggle('active', b.dataset.tab === tabName);
-  });
-  document.querySelectorAll('.tab-pane').forEach(p => {
-    p.classList.toggle('active', p.id === `tab-${tabName}`);
-  });
-
-  if (tabName === 'fleet') loadFleetOverview();
-  else if (tabName === 'workflows') loadWorkflows();
-  else if (tabName === 'stuck') loadStuckWorkflows();
-  else if (tabName === 'audit') loadAuditLogs();
-}
-
-// ==========================================================================
-// TAB 1: Fleet Overview
-// ==========================================================================
-
-async function loadFleetOverview() {
-  try {
-    const data = await apiFetch('/api/operator/overview');
-    
-    // KPI Updates
-    document.getElementById('kpi-total-workflows').textContent = data.total_workflows || 0;
-    document.getElementById('kpi-stuck-workflows').textContent = data.stuck_count || 0;
-    document.getElementById('kpi-pending-approvals').textContent = data.pending_approvals_count || 0;
-    
-    const counts = data.counts_by_state || {};
-    document.getElementById('kpi-escalated-workflows').textContent = counts.ESCALATED || 0;
-    document.getElementById('kpi-completed-workflows').textContent = counts.COMPLETED || 0;
-
-    // Badges
-    document.getElementById('badge-workflow-count').textContent = data.total_workflows || 0;
-    document.getElementById('badge-stuck-count').textContent = data.stuck_count || 0;
-
-    // Distribution Bar
-    const total = data.total_workflows || 1;
-    const states = ['CREATED', 'EXECUTING', 'AWAITING_APPROVAL', 'RECOVERING', 'ESCALATED', 'COMPLETED'];
-    const bar = document.getElementById('state-distribution-bar');
-    const legend = document.getElementById('state-legend');
-    
-    bar.innerHTML = '';
-    legend.innerHTML = '';
-
-    states.forEach(st => {
-      const count = counts[st] || 0;
-      const pct = (count / total) * 100;
-      if (pct > 0) {
-        const seg = document.createElement('div');
-        seg.className = `bar-segment state-${st.toLowerCase()}`;
-        seg.style.width = `${pct}%`;
-        seg.title = `${st}: ${count} (${Math.round(pct)}%)`;
-        bar.appendChild(seg);
-      }
-
-      const item = document.createElement('div');
-      item.className = 'legend-item';
-      item.innerHTML = `
-        <span class="legend-dot state-${st.toLowerCase()}"></span>
-        <span>${st} (${count})</span>
-      `;
-      legend.appendChild(item);
-    });
-
-  } catch (err) {
-    showToast(`Failed to load fleet overview: ${err.message}`, 'error');
-  }
-}
-
-// ==========================================================================
-// TAB 2: Workflow Explorer
-// ==========================================================================
-
-async function loadWorkflows() {
-  const tbody = document.getElementById('workflows-table-body');
-  tbody.innerHTML = '<tr><td colspan="8" class="empty-state">Loading workflows...</td></tr>';
-
-  const stateFilter = document.getElementById('filter-state-select').value;
-  const scenarioFilter = document.getElementById('filter-scenario-select').value;
-  const stuckOnly = document.getElementById('filter-stuck-only').checked;
-  const search = document.getElementById('workflow-search-input').value.trim();
-
-  const params = new URLSearchParams({
-    limit: state.pageLimit,
-    offset: state.pageOffset,
-  });
-  if (stateFilter) params.append('state', stateFilter);
-  if (scenarioFilter) params.append('scenario', scenarioFilter);
-  if (stuckOnly) params.append('is_stuck', 'true');
-  if (search) params.append('search', search);
-
-  try {
-    const data = await apiFetch(`/api/workflows?${params.toString()}`);
-    state.workflows = data.workflows || [];
-    state.totalWorkflows = data.total || state.workflows.length;
-
-    renderWorkflowsTable();
-    updatePagination();
-  } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="8" class="empty-state error">Failed to load workflows: ${err.message}</td></tr>`;
-  }
-}
-
-function renderWorkflowsTable() {
-  const tbody = document.getElementById('workflows-table-body');
-  if (state.workflows.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No workflows found matching criteria.</td></tr>';
-    return;
-  }
-
-  tbody.innerHTML = state.workflows.map(wf => {
-    const stateVal = (wf.state || 'UNKNOWN').toLowerCase();
-    const age = formatAge(wf.created_at || wf.dispatched_at);
-    const isStuck = wf.is_stuck;
-
-    return `
-      <tr class="${isStuck ? 'row-stuck' : ''}">
-        <td class="cell-mono">
-          <a href="#" class="wf-link" data-id="${wf.workflow_id}">${wf.workflow_id.slice(0, 8)}...</a>
-        </td>
-        <td><strong>${wf.scenario || wf.name || 'Default Workflow'}</strong></td>
-        <td>
-          <span class="status-badge ${stateVal}">${wf.state}</span>
-        </td>
-        <td class="cell-mono">v${wf.version || 1}</td>
-        <td>${age}</td>
-        <td class="cell-mono">${wf.tenant_id || 'default'}</td>
-        <td>
-          ${isStuck ? '<span class="tag-stuck">⚠ STUCK</span>' : '<span class="status-text">HEALTHY</span>'}
-        </td>
-        <td>
-          <div class="drawer-action-bar">
-            <button class="btn btn-secondary btn-sm btn-inspect" data-id="${wf.workflow_id}">Inspect</button>
-            ${!['COMPLETED'].includes(wf.state) ? `<button class="btn btn-primary btn-sm btn-quick-rec" data-id="${wf.workflow_id}" data-version="${wf.version || 1}">Recover</button>` : ''}
-          </div>
-        </td>
-      </tr>
-    `;
-  }).join('');
-
-  // Attach event listeners
-  tbody.querySelectorAll('.wf-link, .btn-inspect').forEach(el => {
-    el.addEventListener('click', (e) => {
-      e.preventDefault();
-      openWorkflowDrawer(el.dataset.id);
-    });
-  });
-
-  tbody.querySelectorAll('.btn-quick-rec').forEach(el => {
-    el.addEventListener('click', () => {
-      openRecoverModal(el.dataset.id, el.dataset.version);
-    });
-  });
-}
-
-function updatePagination() {
-  const info = document.getElementById('pagination-info');
-  const btnPrev = document.getElementById('btn-prev-page');
-  const btnNext = document.getElementById('btn-next-page');
-
-  const start = state.pageOffset + 1;
-  const end = Math.min(state.pageOffset + state.pageLimit, state.totalWorkflows);
-
-  info.textContent = `Showing ${state.totalWorkflows > 0 ? start : 0} – ${end} of ${state.totalWorkflows}`;
-  btnPrev.disabled = state.pageOffset === 0;
-  btnNext.disabled = end >= state.totalWorkflows;
-}
-
-// ==========================================================================
-// TAB 3: Stuck & Recovery Hub
-// ==========================================================================
-
-async function loadStuckWorkflows() {
-  const container = document.getElementById('stuck-workflows-container');
-  container.innerHTML = '<div class="empty-state">Scanning for stuck workflows...</div>';
-
-  try {
-    const data = await apiFetch('/api/operator/stuck-workflows');
-    state.stuckWorkflows = data.stuck_workflows || [];
-
-    if (state.stuckWorkflows.length === 0) {
-      container.innerHTML = `
-        <div class="panel" style="grid-column: 1 / -1; text-align: center; padding: 40px;">
-          <h3 style="color: var(--color-emerald); margin-bottom: 8px;">✓ All Workflows Healthy</h3>
-          <p class="subtext">Zero stalled or lease-expired workflows detected in active tenant scope.</p>
-        </div>
-      `;
-      return;
+    hideCinematicIncident();
+    hideToolExecution();
+    // Phase 31 Finding 2: Only show Recovery Proof for COMPLETED workflows
+    if (normalizedEvent.state === 'COMPLETED') {
+      showRecoveryProof(appState.snapshot);
     }
-
-    container.innerHTML = state.stuckWorkflows.map(item => `
-      <div class="stuck-card">
-        <div class="stuck-card-header">
-          <div>
-            <div class="stuck-card-id">${item.workflow_id}</div>
-            <span class="status-badge ${item.state.toLowerCase()}">${item.state}</span>
-          </div>
-          <span class="badge-code">OCC v${item.version}</span>
-        </div>
-
-        <div class="stuck-reason-box">
-          <strong>Stuck Reason:</strong> ${item.stuck_reason || 'Inactive beyond expected duration threshold.'}
-        </div>
-
-        <div style="font-size: 0.78rem; color: var(--text-muted); font-family: var(--font-mono);">
-          Age: ${item.age_seconds}s • Events: ${item.event_count}
-        </div>
-
-        <div class="drawer-action-bar" style="margin-top: auto;">
-          <button class="btn btn-secondary btn-sm btn-inspect" data-id="${item.workflow_id}">Inspect</button>
-          <button class="btn btn-primary btn-sm btn-quick-rec" data-id="${item.workflow_id}" data-version="${item.version}">Recover Now</button>
-        </div>
-      </div>
-    `).join('');
-
-    container.querySelectorAll('.btn-inspect').forEach(el => {
-      el.addEventListener('click', () => openWorkflowDrawer(el.dataset.id));
-    });
-    container.querySelectorAll('.btn-quick-rec').forEach(el => {
-      el.addEventListener('click', () => openRecoverModal(el.dataset.id, el.dataset.version));
-    });
-
-  } catch (err) {
-    container.innerHTML = `<div class="empty-state error">Error loading stuck workflows: ${err.message}</div>`;
+    showReplayToolbar();
+    refreshFleetData();
   }
 }
 
+function handleIncomingEvent(event) {
+  const norm = normalizeWorkflowEvent(event);
+  applyWorkflowEvent(norm);
+}
+
 // ==========================================================================
-// TAB 4: Security & Audit Logs
+// 4. Real-Time Single-Use Ticket SSE Stream
 // ==========================================================================
 
-async function loadAuditLogs() {
-  const tbody = document.getElementById('audit-table-body');
-  tbody.innerHTML = '<tr><td colspan="8" class="empty-state">Loading audit trail...</td></tr>';
+async function connectWorkflowStream(workflowId) {
+  if (appState.eventSource) {
+    appState.eventSource.close();
+    appState.eventSource = null;
+  }
 
-  const eventType = document.getElementById('filter-audit-event-type').value;
-  const search = document.getElementById('audit-search-input').value.trim();
-
-  const params = new URLSearchParams({ limit: 50, offset: 0 });
-  if (eventType) params.append('event_type', eventType);
+  updateStreamStatus('CONNECTING...', false);
 
   try {
-    const data = await apiFetch(`/api/audit/logs?${params.toString()}`);
-    let logs = data.audit_logs || [];
-
-    if (search) {
-      const q = search.toLowerCase();
-      logs = logs.filter(l => 
-        (l.actor_id && l.actor_id.toLowerCase().includes(q)) ||
-        (l.action && l.action.toLowerCase().includes(q)) ||
-        (l.workflow_id && l.workflow_id.toLowerCase().includes(q))
-      );
-    }
-
-    if (logs.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No audit logs recorded yet.</td></tr>';
-      return;
-    }
-
-    tbody.innerHTML = logs.map(l => {
-      const outcomeClass = l.outcome === 'SUCCESS' ? 'color: var(--color-emerald);' : 'color: var(--color-rose);';
-      return `
-        <tr>
-          <td class="cell-mono">${l.timestamp ? l.timestamp.replace('T', ' ').slice(0, 19) : '-'}</td>
-          <td><strong>${l.event_type}</strong></td>
-          <td class="cell-mono">${l.actor_id}</td>
-          <td>${l.role}</td>
-          <td><code>${l.action || '-'}</code></td>
-          <td class="cell-mono">${l.workflow_id ? `<a href="#" class="wf-link" data-id="${l.workflow_id}">${l.workflow_id.slice(0, 8)}...</a>` : '-'}</td>
-          <td><strong style="${outcomeClass}">${l.outcome}</strong></td>
-          <td>${l.reason || '-'}</td>
-        </tr>
-      `;
-    }).join('');
-
-    tbody.querySelectorAll('.wf-link').forEach(el => {
-      el.addEventListener('click', (e) => {
-        e.preventDefault();
-        openWorkflowDrawer(el.dataset.id);
-      });
-    });
-
-  } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="8" class="empty-state error">Failed to load audit logs: ${err.message}</td></tr>`;
-  }
-}
-
-// ==========================================================================
-// Workflow Detail Drawer & Live SSE Streaming
-// ==========================================================================
-
-async function openWorkflowDrawer(workflowId) {
-  state.activeWorkflowId = workflowId;
-  const drawer = document.getElementById('workflow-detail-drawer');
-  drawer.classList.add('open');
-
-  document.getElementById('drawer-workflow-id').textContent = workflowId;
-  document.getElementById('drawer-events-terminal').innerHTML = '<div class="terminal-line system">Fetching workflow state...</div>';
-
-  try {
-    const snapshot = await apiFetch(`/api/workflows/${workflowId}`);
-    state.activeWorkflowSnapshot = snapshot;
-    renderDrawerDetails(snapshot);
-    connectEventStream(workflowId);
-  } catch (err) {
-    showToast(`Failed to open workflow: ${err.message}`, 'error');
-  }
-}
-
-function renderDrawerDetails(snapshot) {
-  const wf = snapshot.workflow || {};
-  const stateVal = (wf.state || 'UNKNOWN').toLowerCase();
-
-  const stateBadge = document.getElementById('drawer-state-badge');
-  stateBadge.className = `status-badge ${stateVal}`;
-  stateBadge.textContent = wf.state || 'UNKNOWN';
-
-  document.getElementById('drawer-occ-version').textContent = wf.version || 1;
-  document.getElementById('drawer-tenant-id').textContent = wf.tenant_id || 'tenant-default';
-
-  // HITL Approval button visibility
-  const btnApprove = document.getElementById('btn-drawer-approve');
-  const pendingApprovals = snapshot.approvals?.filter(a => a.status === 'PENDING') || [];
-  btnApprove.style.display = pendingApprovals.length > 0 ? 'inline-flex' : 'none';
-
-  // Outcomes List
-  const outcomesContainer = document.getElementById('drawer-outcomes-list');
-  const outcomes = wf.contract?.required_outcomes || [];
-  if (outcomes.length === 0) {
-    outcomesContainer.innerHTML = '<div class="empty-state">No outcome contract specified.</div>';
-  } else {
-    outcomesContainer.innerHTML = outcomes.map(o => `
-      <div class="outcome-item">
-        <div>
-          <strong>${o.description || o.outcome_id}</strong>
-          <div style="font-size: 0.72rem; color: var(--text-muted);">${o.verification_method || 'contract check'}</div>
-        </div>
-        <span class="status-badge ${wf.state === 'COMPLETED' ? 'completed' : 'executing'}">
-          ${wf.state === 'COMPLETED' ? 'VERIFIED' : 'PENDING'}
-        </span>
-      </div>
-    `).join('');
-  }
-
-  // Steps List
-  const stepsContainer = document.getElementById('drawer-steps-list');
-  const steps = snapshot.steps || [];
-  if (steps.length === 0) {
-    stepsContainer.innerHTML = '<div class="empty-state">No steps executed yet.</div>';
-  } else {
-    stepsContainer.innerHTML = steps.map(s => `
-      <div class="step-item">
-        <div>
-          <strong>${s.tool_name || s.name}</strong>
-          <div style="font-size: 0.72rem; color: var(--text-muted); font-family: var(--font-mono);">${s.step_id}</div>
-        </div>
-        <span class="status-badge ${(s.status || 'UNKNOWN').toLowerCase()}">${s.status}</span>
-      </div>
-    `).join('');
-  }
-
-  // Initial Events in Terminal
-  const terminal = document.getElementById('drawer-events-terminal');
-  const events = snapshot.events || [];
-  terminal.innerHTML = events.map(e => `
-    <div class="terminal-line event">
-      [${e.timestamp ? e.timestamp.slice(11, 19) : ''}] <strong>${e.event_type || e.type}</strong>: ${e.detail || e.title || ''}
-    </div>
-  `).join('');
-}
-
-async function connectEventStream(workflowId) {
-  if (state.eventSource) {
-    state.eventSource.close();
-  }
-
-  const terminal = document.getElementById('drawer-events-terminal');
-  const pulse = document.getElementById('stream-pulse-indicator');
-  pulse.style.background = 'var(--color-cyan)';
-
-  try {
-    // Request single-use SSE ticket (eliminating JWT exposure in URLs)
     const ticketData = await apiFetch('/api/auth/sse-ticket', {
       method: 'POST',
       body: JSON.stringify({ workflow_id: workflowId }),
     });
 
-    state.eventSource = new EventSource(`/api/workflows/${workflowId}/events/stream?ticket=${encodeURIComponent(ticketData.ticket)}`);
+    const ticket = ticketData.ticket;
+    const streamUrl = `/api/workflows/${workflowId}/events/stream?ticket=${encodeURIComponent(ticket)}`;
 
-    state.eventSource.onmessage = (e) => {
-    try {
-      const ev = JSON.parse(e.data);
-      const line = document.createElement('div');
-      line.className = 'terminal-line event';
-      line.innerHTML = `[${new Date().toISOString().slice(11, 19)}] <strong>${ev.event_type || 'EVENT'}</strong>: ${ev.detail || ev.state || JSON.stringify(ev)}`;
-      terminal.appendChild(line);
-      terminal.scrollTop = terminal.scrollHeight;
+    const es = new EventSource(streamUrl);
+    appState.eventSource = es;
 
-      if (ev.event_type === 'STREAM_END') {
-        pulse.style.background = 'var(--text-muted)';
-        state.eventSource.close();
+    es.onopen = () => {
+      updateStreamStatus('● LIVE EXECUTION', true);
+      appendTerminalLine('SYSTEM', `Connected to real-time event stream for ${workflowId.slice(0, 8)}...`, 'actor-system');
+    };
+
+    es.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        handleIncomingEvent(data);
+      } catch (err) {
+        console.debug('Raw stream ping:', event.data);
       }
-    } catch (err) {
-      console.warn('Error parsing SSE event:', err);
+    };
+
+    es.onerror = () => {
+      updateStreamStatus('STREAM DISCONNECTED', false);
+      if (es.readyState === EventSource.CLOSED) {
+        appState.eventSource = null;
+      }
+    };
+  } catch (err) {
+    console.error('Failed to establish SSE stream:', err);
+    updateStreamStatus('STREAM OFFLINE', false);
+  }
+}
+window.connectWorkflowStream = connectWorkflowStream;
+
+function updateStreamStatus(text, isLive) {
+  const pill = document.getElementById('stream-status-pill');
+  const dot = pill?.querySelector('.stream-dot');
+  const txt = document.getElementById('stream-status-text');
+
+  if (txt) txt.textContent = text;
+  if (dot) {
+    if (isLive) dot.classList.add('connected');
+    else dot.classList.remove('connected');
+  }
+}
+
+// ==========================================================================
+// 5. Stage-Dominant Graph Animation
+// ==========================================================================
+
+function illuminateNode(stageId, actionText) {
+  const stages = ['detect', 'reason', 'recover', 'verify', 'recovered'];
+  const curIdx = stages.indexOf(stageId);
+  if (curIdx === -1) return;
+
+  appState.activeStage = stageId;
+
+  stages.forEach((st, idx) => {
+    const node = document.getElementById(`node-${st}`);
+    const badgeEl = document.getElementById(`node-${st}-badge`);
+    if (!node) return;
+
+    node.classList.remove('active', 'completed', 'escalated');
+
+    if (idx < curIdx) {
+      node.classList.add('completed');
+      if (badgeEl) badgeEl.textContent = 'VERIFIED';
+    } else if (idx === curIdx) {
+      node.classList.add('active');
+      if (badgeEl) badgeEl.textContent = 'ACTIVE';
+    } else {
+      if (badgeEl) badgeEl.textContent = 'WAITING';
     }
-  };
+  });
 
-    state.eventSource.onerror = () => {
-      pulse.style.background = 'var(--text-muted)';
-      if (state.eventSource) state.eventSource.close();
-    };
-  } catch (err) {
-    console.error('Failed to obtain SSE ticket or connect stream:', err);
-    pulse.style.background = 'var(--text-muted)';
+  if (actionText) {
+    const act = document.getElementById(`node-${stageId}-action`);
+    if (act) act.textContent = actionText;
   }
 }
 
-function closeDrawer() {
-  document.getElementById('workflow-detail-drawer').classList.remove('open');
-  if (state.eventSource) {
-    state.eventSource.close();
-    state.eventSource = null;
+function handleWorkflowStateChange(newState) {
+  if (!newState) return;
+
+  // Phase 31 Finding 10: Terminal state regression guard
+  const TERMINAL_STATES = ['COMPLETED', 'ESCALATED'];
+  if (TERMINAL_STATES.includes(appState.workflowStatus) && !TERMINAL_STATES.includes(newState)) {
+    return; // Reject regression from terminal state
+  }
+
+  appState.workflowStatus = newState;
+
+  const stageLabel = document.getElementById('graph-stage-label');
+  if (stageLabel) stageLabel.textContent = `LIFECYCLE: ${newState}`;
+
+  if (newState === 'EXECUTING') {
+    illuminateNode('recover', 'Tool Executing');
+    updateStoryLifecycle(4);
+  } else if (newState === 'AWAITING_APPROVAL') {
+    const nodeReason = document.getElementById('node-reason');
+    if (nodeReason) {
+      nodeReason.classList.remove('active', 'completed');
+      nodeReason.classList.add('escalated');
+    }
+    updateStoryLifecycle(3);
+    showApprovalBanner();
+  } else if (newState === 'COMPLETED') {
+    illuminateNode('recovered', 'Zero-Downtime Restored');
+    updateStoryLifecycle(6);
+    hideApprovalBanner();
+  } else if (newState === 'ESCALATED') {
+    const nodeRec = document.getElementById('node-recover');
+    if (nodeRec) {
+      nodeRec.classList.remove('active');
+      nodeRec.classList.add('escalated');
+    }
   }
 }
 
+function updateStoryLifecycle(stepNum) {
+  for (let i = 1; i <= 6; i++) {
+    const el = document.getElementById(`narrative-step-${i}`);
+    if (!el) continue;
+    el.classList.remove('active', 'done');
+    if (i < stepNum) {
+      el.classList.add('done');
+    } else if (i === stepNum) {
+      el.classList.add('active');
+    }
+  }
+}
+
+function resetGraph() {
+  const stages = ['detect', 'reason', 'recover', 'verify', 'recovered'];
+  stages.forEach((st) => {
+    const node = document.getElementById(`node-${st}`);
+    if (node) node.classList.remove('active', 'completed', 'escalated');
+    const badge = document.getElementById(`node-${st}-badge`);
+    if (badge) badge.textContent = 'WAITING';
+  });
+  const stageLbl = document.getElementById('graph-stage-label');
+  if (stageLbl) {
+    stageLbl.textContent = 'IDLE • AWAITING TRIGGER';
+    stageLbl.style.color = 'var(--cyan-core)';
+  }
+  updateStoryLifecycle(1);
+  hideApprovalBanner();
+  hideCinematicIncident();
+  hideToolExecution();
+  hideRecoveryProof();
+  hideWorkerResilience();
+  hideReplayToolbar();
+}
+
 // ==========================================================================
-// Modals & Action Hub
+// 6. Cinematic Alerts, Tool Cards & Recovery Proof
 // ==========================================================================
 
-async function openDiagnosticsModal(workflowId) {
-  const modal = document.getElementById('modal-diagnostics');
-  const body = document.getElementById('diagnostics-modal-body');
-  modal.classList.add('open');
-  body.innerHTML = '<div class="loading-spinner"></div>';
+function showCinematicIncident(scenarioName) {
+  const banner = document.getElementById('incident-cinematic-banner');
+  const title = document.getElementById('cinematic-incident-title');
+  const desc = document.getElementById('cinematic-incident-desc');
 
+  if (scenarioName === 'billing_unavailable') {
+    if (title) title.textContent = 'INCIDENT DETECTED: BILLING PROVIDER UNAVAILABLE';
+    if (desc) desc.textContent = 'Stripe API latency spike (HTTP 500). Autonomous Recovery Agent engaged.';
+  } else if (scenarioName === 'contradictory_evidence') {
+    if (title) title.textContent = 'INCIDENT DETECTED: CONTRADICTORY IDENTITY DATA';
+    if (desc) desc.textContent = 'Conflicting risk scores detected across providers. Safe escalation boundary engaged.';
+  } else if (scenarioName === 'worker_interruption') {
+    if (title) title.textContent = 'INCIDENT DETECTED: WORKER PROCESS INTERRUPTION';
+    if (desc) desc.textContent = 'Execution lease expired. OCC heartbeat reconciles in-flight state without duplication.';
+  }
+
+  banner?.classList.remove('hidden');
+}
+
+function hideCinematicIncident() {
+  document.getElementById('incident-cinematic-banner')?.classList.add('hidden');
+}
+
+function showToolExecution(toolName, args, idempKey) {
+  const card = document.getElementById('tool-execution-card');
+  const nameEl = document.getElementById('tool-name-val');
+  const argsEl = document.getElementById('tool-args-val');
+  const idempEl = document.getElementById('tool-idemp-val');
+
+  if (nameEl) nameEl.textContent = toolName;
+  if (argsEl) argsEl.textContent = typeof args === 'string' ? args : JSON.stringify(args);
+  if (idempEl) idempEl.textContent = idempKey || 'op_dispatch_auto';
+
+  card?.classList.remove('hidden');
+}
+
+function hideToolExecution() {
+  document.getElementById('tool-execution-card')?.classList.add('hidden');
+}
+
+function showWorkerResilience(snapshot) {
+  const card = document.getElementById('worker-resilience-card');
+  if (!card) return;
+  card.classList.remove('hidden');
+
+  // Phase 31 Finding 1: Evidence-gate the resilience badges
+  const badges = card.querySelectorAll('.r-badge');
+  const wf = snapshot?.workflow || {};
+  const events = snapshot?.events || [];
+  const hasResumeEvidence = events.some((e) =>
+    (e.title || '').includes('Resumed') || (e.event_type || '').includes('WORKFLOW_RESUMED')
+  );
+  const isCompleted = wf.state === 'COMPLETED';
+
+  badges.forEach((b) => {
+    if (hasResumeEvidence || isCompleted) {
+      b.classList.remove('pending');
+      b.classList.add('pass');
+      b.textContent = b.textContent.replace('○', '✓');
+    } else {
+      b.classList.remove('pass');
+      b.classList.add('pending');
+      b.textContent = b.textContent.replace('✓', '○');
+    }
+  });
+}
+
+function hideWorkerResilience() {
+  document.getElementById('worker-resilience-card')?.classList.add('hidden');
+}
+
+function showRecoveryProof(snapshot) {
+  const cert = document.getElementById('recovery-proof-certificate');
+  if (!cert) return;
+
+  // Phase 31 Finding 2: Only render proof for COMPLETED workflows
+  const wf = snapshot?.workflow || {};
+  if (wf.state !== 'COMPLETED') return;
+
+  const steps = snapshot?.steps || [];
+  const approvals = snapshot?.approvals || [];
+  const scenName = wf.scenario || 'billing_unavailable';
+
+  const descEl = document.getElementById('proof-scenario-name');
+  if (descEl) descEl.textContent = wf.name || `${scenName} • Autonomous Recovery`;
+
+  const actionEl = document.getElementById('proof-time-action');
+  if (actionEl) {
+    const actStep = steps.find((s) => s.status === 'COMPLETED' || s.tool_name);
+    actionEl.textContent = actStep?.name || actStep?.tool_name || 'switch_payment_gateway';
+  }
+
+  const verifyText = document.getElementById('proof-verification-text');
+  if (verifyText) {
+    if (scenName === 'billing_unavailable') {
+      verifyText.textContent = 'Billing subscription probe → HTTP 200';
+    } else if (scenName === 'contradictory_evidence') {
+      verifyText.textContent = 'Operator authorization confirmed → Contract satisfied';
+    } else {
+      verifyText.textContent = 'Idempotent state probe → HTTP 200';
+    }
+  }
+
+  const interEl = document.getElementById('proof-intervention');
+  if (interEl) {
+    const humanDecisions = approvals.filter((a) => a.status === 'APPROVED' || a.status === 'REJECTED').length;
+    interEl.textContent = humanDecisions > 0 ? `${humanDecisions} (HUMAN AUTHORIZED)` : '0';
+  }
+
+  const mttrEl = document.getElementById('proof-mttr');
+  if (mttrEl) {
+    // Phase 31 Finding 3: Use completed_at (authoritative) not updated_at
+    mttrEl.textContent = calculateWorkflowDuration(wf.created_at, wf.completed_at || wf.updated_at);
+  }
+
+  cert.classList.remove('hidden');
+}
+
+function hideRecoveryProof() {
+  document.getElementById('recovery-proof-certificate')?.classList.add('hidden');
+}
+
+// ==========================================================================
+// 7. Terminal Feed
+// ==========================================================================
+
+function appendTerminalLine(actor, msg, actorClass = 'actor-system') {
+  const container = document.getElementById('terminal-feed-container');
+  if (!container) return;
+
+  const line = document.createElement('div');
+  line.className = 'terminal-line';
+
+  const ts = new Date().toTimeString().split(' ')[0];
+
+  line.innerHTML = `
+    <span class="terminal-ts">[${ts}]</span>
+    <span class="terminal-actor ${actorClass}">${actor}</span>
+    <span class="terminal-msg">${escapeHtml(msg)}</span>
+  `;
+
+  container.appendChild(line);
+  container.scrollTop = container.scrollHeight;
+}
+
+function updateEventCount() {
+  const cnt = document.getElementById('terminal-event-count');
+  if (cnt) cnt.textContent = `${appState.events.length} EVENTS`;
+}
+
+// ==========================================================================
+// 8. Fleet Telemetry & Incident Explorer
+// ==========================================================================
+
+async function loadFleetOverview() {
+  return refreshFleetData();
+}
+window.loadFleetOverview = loadFleetOverview;
+
+async function refreshFleetData() {
   try {
-    const diag = await apiFetch(`/api/workflows/${workflowId}/diagnostics`);
-    body.innerHTML = `
-      <div class="callout ${diag.is_stuck ? 'callout-warning' : 'callout-info'}">
-        <strong>Status:</strong> ${diag.is_stuck ? 'STUCK / STALLED' : 'HEALTHY'}
-        ${diag.stuck_reason ? `<div style="margin-top: 6px;">${diag.stuck_reason}</div>` : ''}
-      </div>
+    const [overview, workflowsData] = await Promise.all([
+      apiFetch('/api/operator/overview').catch(() => null),
+      apiFetch('/api/workflows?limit=50').catch(() => ({ workflows: [] })),
+    ]);
 
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 0.82rem;">
-        <div><strong>Current State:</strong> ${diag.state}</div>
-        <div><strong>OCC Version:</strong> v${diag.version}</div>
-        <div><strong>Age:</strong> ${diag.age_seconds} seconds</div>
-        <div><strong>Event Count:</strong> ${diag.event_count}</div>
-      </div>
+    if (overview) {
+      document.getElementById('kpi-active-incidents').textContent = overview.counts_by_state?.EXECUTING || 0;
+      document.getElementById('kpi-recovered-count').textContent = overview.counts_by_state?.COMPLETED || 0;
+      document.getElementById('kpi-stuck-count').textContent = (overview.stuck_count || 0) + (overview.pending_approvals_count || 0);
+      document.getElementById('kpi-total-workflows').textContent = overview.total_workflows || workflowsData.workflows?.length || 0;
+    }
 
-      ${diag.operation_claim ? `
-        <div class="panel" style="margin-top: 12px; padding: 12px;">
-          <h4 style="font-size: 0.8rem; margin-bottom: 6px;">Distributed Operation Claim Lease</h4>
-          <div style="font-size: 0.75rem; font-family: var(--font-mono);">
-            Owner Worker: ${diag.operation_claim.owner_worker_id || 'none'}<br>
-            Status: ${diag.operation_claim.status}<br>
-            Expires At: ${diag.operation_claim.lease_expires_at || 'n/a'}
-          </div>
-        </div>
-      ` : ''}
-    `;
-
-    document.getElementById('btn-diagnostics-quick-recover').onclick = () => {
-      closeModals();
-      openRecoverModal(workflowId, diag.version);
-    };
+    appState.workflowsList = workflowsData.workflows || [];
+    renderIncidentList();
   } catch (err) {
-    body.innerHTML = `<div class="callout callout-warning">Error fetching diagnostics: ${err.message}</div>`;
+    console.error('Failed to refresh fleet telemetry:', err);
   }
 }
 
-function openRecoverModal(workflowId, version) {
-  state.activeWorkflowId = workflowId;
-  const modal = document.getElementById('modal-recover');
-  document.getElementById('modal-recover-version').textContent = `v${version || 1}`;
-  document.getElementById('recover-reason-input').value = '';
-  modal.classList.add('open');
-}
+function renderIncidentList() {
+  const container = document.getElementById('incident-list-container');
+  if (!container) return;
 
-async function handleRecoverSubmit() {
-  const reason = document.getElementById('recover-reason-input').value.trim();
-  const force = document.getElementById('recover-force-checkbox')?.checked || false;
+  const search = (document.getElementById('incident-search-input')?.value || '').toLowerCase();
 
-  if (!reason) {
-    showToast('Please provide a justification reason for the audit trail.', 'warning');
+  const filtered = appState.workflowsList.filter((wf) => {
+    if (appState.activeFilter === 'running' && wf.state !== 'EXECUTING' && wf.state !== 'CREATED') return false;
+    if (appState.activeFilter === 'completed' && wf.state !== 'COMPLETED') return false;
+    if (appState.activeFilter === 'approvals' && wf.state !== 'AWAITING_APPROVAL') return false;
+
+    if (search) {
+      const matchId = (wf.workflow_id || '').toLowerCase().includes(search);
+      const matchName = (wf.name || '').toLowerCase().includes(search);
+      const matchScen = (wf.scenario || '').toLowerCase().includes(search);
+      if (!matchId && !matchName && !matchScen) return false;
+    }
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    container.innerHTML = `
+      <div class="empty-feed">
+        <div class="empty-icon">🔍</div>
+        <div class="empty-title">No workflows found</div>
+        <div class="empty-sub">Simulate an incident to start live recovery.</div>
+      </div>
+    `;
     return;
   }
 
-  try {
-    const res = await apiFetch(`/api/workflows/${state.activeWorkflowId}/recover`, {
-      method: 'POST',
-      body: JSON.stringify({ reason, force }),
-    });
+  container.innerHTML = filtered.map((wf) => {
+    const isSelected = wf.workflow_id === appState.activeWorkflowId;
+    const stateClass = `state-${(wf.state || 'unknown').toLowerCase()}`;
+    const scen = wf.scenario || 'custom';
+    const timeStr = wf.created_at ? new Date(wf.created_at).toLocaleTimeString() : 'Just now';
 
-    showToast(`Recovery dispatched successfully for ${state.activeWorkflowId}`, 'success');
-    closeModals();
-    refreshCurrentView();
+    return `
+      <div class="incident-card ${isSelected ? 'selected' : ''}" data-id="${wf.workflow_id}">
+        <div class="incident-card-header">
+          <span class="incident-state-badge ${stateClass}">${wf.state || 'UNKNOWN'}</span>
+          <span class="incident-ts">${timeStr}</span>
+        </div>
+        <div class="incident-title">${escapeHtml(wf.name || wf.workflow_id)}</div>
+        <div class="incident-meta-row">
+          <span class="meta-scen">⚡ ${scen}</span>
+          <span class="meta-id">${(wf.workflow_id || '').slice(0, 8)}...</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  container.querySelectorAll('.incident-card').forEach((card) => {
+    card.addEventListener('click', () => {
+      selectWorkflow(card.dataset.id);
+    });
+  });
+}
+
+async function selectWorkflow(workflowId) {
+  appState.activeWorkflowId = workflowId;
+  renderIncidentList();
+
+  resetGraph();
+  appState.events = [];
+  appState.seenEventIds.clear();  // Phase 31: Reset dedup on workflow switch
+  appState.workflowStatus = 'IDLE';  // Phase 31: Reset terminal guard
+  document.getElementById('terminal-feed-container').innerHTML = '';
+
+  try {
+    const snapshot = await apiFetch(`/api/workflows/${workflowId}`);
+    appState.snapshot = snapshot;
+    appState.workflow = snapshot.workflow;
+
+    const incidentName = snapshot.workflow?.name || workflowId;
+    document.getElementById('canvas-incident-name').textContent = incidentName;
+
+    updateFourQuestionsInspector(snapshot);
+    updateAutonomyDecisionCard(snapshot.workflow?.scenario, snapshot.workflow?.state);
+
+    if (snapshot.workflow?.scenario === 'worker_interruption') {
+      showWorkerResilience(snapshot);
+    }
+
+    if (snapshot.events && snapshot.events.length > 0) {
+      snapshot.events.forEach((ev) => handleIncomingEvent(ev));
+    }
+
+    if (snapshot.workflow?.state === 'EXECUTING' || snapshot.workflow?.state === 'CREATED') {
+      showCinematicIncident(snapshot.workflow?.scenario);
+      connectWorkflowStream(workflowId);
+    } else {
+      updateStreamStatus('COMPLETED ARCHIVE', false);
+      // Phase 31 Finding 2: Only show proof for COMPLETED workflows
+      if (snapshot.workflow?.state === 'COMPLETED') {
+        showRecoveryProof(snapshot);
+      }
+      showReplayToolbar();
+    }
   } catch (err) {
-    showToast(`Recovery failed: ${err.message}`, 'error');
+    console.error('Failed to load workflow snapshot:', err);
   }
 }
 
-async function openApproveModal(workflowId) {
-  state.activeWorkflowId = workflowId;
-  const modal = document.getElementById('modal-approve');
-  const body = document.getElementById('modal-approve-body');
-  modal.classList.add('open');
+// ==========================================================================
+// 9. "Why Did You Do That?" Inspector & Autonomy Decision Card
+// ==========================================================================
 
-  try {
-    const data = await apiFetch(`/api/workflows/${workflowId}/approvals`);
-    const pending = (data.approvals || []).find(a => a.status === 'PENDING');
-    if (!pending) {
-      body.innerHTML = '<div class="empty-state">No pending approvals found.</div>';
+function updateAutonomyDecisionCard(scenario, wfState) {
+  const statement = document.getElementById('decision-statement-text');
+  const badge = document.getElementById('decision-badge-pill');
+
+  if (scenario === 'billing_unavailable') {
+    if (statement) statement.textContent = '✓ POLICY ALLOWS AUTONOMOUS FAILOVER • Confidence: HIGH • Constraint Violations: 0';
+    if (badge) {
+      badge.textContent = 'AUTONOMOUS ACTION PERMITTED';
+      badge.className = 'decision-badge pass';
+    }
+  } else if (scenario === 'contradictory_evidence') {
+    // Phase 31 Finding 5: Autonomy badge responds to all workflow states
+    if (wfState === 'COMPLETED') {
+      if (statement) statement.textContent = '✓ OPERATOR AUTHORIZED RECOVERY • Human approval granted • Recovery executed and verified';
+      if (badge) { badge.textContent = 'OPERATOR AUTHORIZED'; badge.className = 'decision-badge pass'; }
+    } else if (wfState === 'ESCALATED') {
+      if (statement) statement.textContent = '✗ OPERATOR REJECTED RECOVERY • Human declined action • Workflow escalated';
+      if (badge) { badge.textContent = 'ESCALATED (REJECTED)'; badge.className = 'decision-badge escalated'; }
+    } else {
+      if (statement) statement.textContent = '⚠ AUTONOMY BOUNDARY REACHED • Conflicting evidence across providers • Human authorization required';
+      if (badge) { badge.textContent = 'AUTONOMY BOUNDARY REACHED'; badge.className = 'decision-badge escalated'; }
+    }
+  } else if (scenario === 'worker_interruption') {
+    if (statement) statement.textContent = '✓ RESILIENT RECONCILIATION • Lease expired • State reconciled before safe idempotent resume';
+    if (badge) {
+      badge.textContent = 'OCC LEASE RECONCILED';
+      badge.className = 'decision-badge pass';
+    }
+  }
+}
+
+function updateFourQuestionsInspector(snapshot) {
+  const wf = snapshot.workflow || {};
+  const contract = snapshot.contract || {};
+
+  const narrative = document.querySelector('.narrative-quote');
+  const seeBox = document.getElementById('audit-see-body');
+  const thinkBox = document.getElementById('audit-think-body');
+  const doBox = document.getElementById('audit-do-body');
+
+  if (wf.scenario === 'billing_unavailable') {
+    if (narrative) narrative.textContent = `"I detected repeated Stripe failures, confirmed the failure pattern against policy thresholds, switched to the configured secondary provider (Adyen), and verified recovery with a successful transaction probe."`;
+    if (seeBox) seeBox.textContent = 'Stripe endpoint /v1/charges returned consecutive HTTP 500 timeouts across verification window.';
+    if (thinkBox) thinkBox.textContent = 'Primary provider is degraded. Secondary provider (Adyen) is healthy. Automated failover permitted by policy (0 violations).';
+    if (doBox) doBox.innerHTML = '<code>switch_payment_gateway(provider="adyen")</code>';
+  } else if (wf.scenario === 'contradictory_evidence') {
+    if (narrative) narrative.textContent = `"I detected conflicting risk records between credit bureaus. Because autonomous execution would risk compliance violation, I safely escalated to human approval."`;
+    if (seeBox) seeBox.textContent = 'Conflicting identity verification data returned from multi-provider checks (Experian: 42 vs Equifax: 88).';
+    if (thinkBox) thinkBox.textContent = 'Autonomous action blocked by policy constraint. Human operator authorization required before proceeding.';
+    if (doBox) doBox.innerHTML = '<code>request_human_approval(scope="risk_override")</code>';
+  } else if (wf.scenario === 'worker_interruption') {
+    if (narrative) narrative.textContent = `"I detected a worker crash mid-operation. The OCC lease expired, state was safely reconciled against external services, and execution resumed idempotently."`;
+    if (seeBox) seeBox.textContent = 'Worker heartbeat ceased. Operation claim lease expired after 60s.';
+    if (thinkBox) thinkBox.textContent = 'Worker container interrupted. Reconcile external state and resume safely without double billing.';
+    if (doBox) doBox.innerHTML = '<code>reconcile_and_resume_execution()</code>';
+  }
+
+  // Criteria Checklist
+  const criteriaBox = document.getElementById('inspect-criteria-checklist');
+  const requiredOutcomes = contract.required_outcomes || [
+    { outcome_id: 'identity_verified', verified: true },
+    { outcome_id: 'billing_configured', verified: wf.state === 'COMPLETED' },
+    { outcome_id: 'account_activated', verified: wf.state === 'COMPLETED' },
+  ];
+
+  if (criteriaBox) {
+    criteriaBox.innerHTML = requiredOutcomes.map((o) => `
+      <div class="criteria-item ${o.verified ? 'verified' : 'pending'}" id="crit-${o.outcome_id}">
+        <span class="c-icon">${o.verified ? '✓' : '○'}</span>
+        <span class="c-name">${o.outcome_id}</span>
+      </div>
+    `).join('');
+  }
+}
+
+function markCriteriaVerified(outcomeId) {
+  const el = document.getElementById(`crit-${outcomeId}`);
+  if (el) {
+    el.classList.remove('pending');
+    el.classList.add('verified');
+    const icon = el.querySelector('.c-icon');
+    if (icon) icon.textContent = '✓';
+  }
+}
+
+// ==========================================================================
+// 10. Read-Only Decision Replay Engine
+// ==========================================================================
+
+function showReplayToolbar() {
+  document.getElementById('replay-toolbar')?.classList.remove('hidden');
+}
+
+function hideReplayToolbar() {
+  document.getElementById('replay-toolbar')?.classList.add('hidden');
+}
+
+function startReplay() {
+  if (!appState.snapshot?.events?.length) return;
+
+  appState.replay.active = true;
+  appState.replay.events = [...appState.snapshot.events];
+  appState.replay.currentIndex = 0;
+
+  updateStreamStatus('↺ DECISION REPLAY • READ-ONLY', true);
+  resetGraph();
+  document.getElementById('terminal-feed-container').innerHTML = '';
+  appState.events = [];
+
+  document.getElementById('btn-replay-play')?.classList.add('hidden');
+  document.getElementById('btn-replay-pause')?.classList.remove('hidden');
+
+  appState.replay.timer = setInterval(() => {
+    if (appState.replay.currentIndex >= appState.replay.events.length) {
+      pauseReplay();
       return;
     }
-
-    state.activeApprovalId = pending.approval_id;
-    body.innerHTML = `
-      <div class="callout callout-info">
-        <strong>Plan Description:</strong> ${pending.plan_description || 'Proposed recovery action requiring human authorization.'}
-      </div>
-      <div style="font-size: 0.82rem; margin-top: 10px;">
-        <strong>Target Action:</strong> <code>${pending.action_tool || 'tool_execution'}</code>
-      </div>
-    `;
-  } catch (err) {
-    body.innerHTML = `<div class="callout callout-warning">Failed to load approval: ${err.message}</div>`;
-  }
+    const ev = appState.replay.events[appState.replay.currentIndex];
+    handleIncomingEvent(ev);
+    appState.replay.currentIndex++;
+  }, 1000);
 }
 
-async function handleApproveSubmit(approved) {
-  try {
-    await apiFetch(`/api/workflows/${state.activeWorkflowId}/approve/${state.activeApprovalId}`, {
-      method: 'POST',
-      body: JSON.stringify({ approved, reason: approved ? 'Operator approved plan' : 'Operator rejected plan' }),
-    });
-
-    showToast(`Approval decision recorded (${approved ? 'APPROVED' : 'REJECTED'})`, 'success');
-    closeModals();
-    refreshCurrentView();
-  } catch (err) {
-    showToast(`Approval submission failed: ${err.message}`, 'error');
+function pauseReplay() {
+  appState.replay.active = false;
+  if (appState.replay.timer) {
+    clearInterval(appState.replay.timer);
+    appState.replay.timer = null;
   }
+  document.getElementById('btn-replay-play')?.classList.remove('hidden');
+  document.getElementById('btn-replay-pause')?.classList.add('hidden');
 }
 
-function openCancelModal(workflowId) {
-  state.activeWorkflowId = workflowId;
-  document.getElementById('cancel-reason-input').value = '';
-  document.getElementById('modal-cancel').classList.add('open');
-}
+function stepReplay() {
+  if (!appState.snapshot?.events?.length) return;
+  pauseReplay();
 
-async function handleCancelSubmit() {
-  const reason = document.getElementById('cancel-reason-input').value.trim();
-  if (!reason) {
-    showToast('Mandatory cancellation reason required.', 'warning');
-    return;
+  if (appState.replay.currentIndex >= appState.snapshot.events.length) {
+    appState.replay.currentIndex = 0;
+    resetGraph();
+    document.getElementById('terminal-feed-container').innerHTML = '';
   }
 
-  try {
-    await apiFetch(`/api/workflows/${state.activeWorkflowId}/cancel`, {
-      method: 'POST',
-      body: JSON.stringify({ reason }),
-    });
-
-    showToast(`Workflow ${state.activeWorkflowId} transitioned to ESCALATED`, 'success');
-    closeModals();
-    refreshCurrentView();
-  } catch (err) {
-    showToast(`Cancellation failed: ${err.message}`, 'error');
-  }
+  const ev = appState.snapshot.events[appState.replay.currentIndex];
+  handleIncomingEvent(ev);
+  appState.replay.currentIndex++;
 }
 
-async function handleLaunchScenario() {
-  const scenario = document.getElementById('scenario-select').value;
-  try {
-    const res = await apiFetch(`/api/scenarios/${scenario}`, { method: 'POST' });
-    showToast(`Scenario launched: ${res.workflow_id || 'OK'}`, 'success');
-    closeModals();
-    refreshCurrentView();
-  } catch (err) {
-    showToast(`Launch failed: ${err.message}`, 'error');
-  }
-}
-
-function closeModals() {
-  document.querySelectorAll('.modal').forEach(m => m.classList.remove('open'));
-}
-
-function refreshCurrentView() {
-  if (state.activeTab === 'fleet') loadFleetOverview();
-  else if (state.activeTab === 'workflows') loadWorkflows();
-  else if (state.activeTab === 'stuck') loadStuckWorkflows();
-  else if (state.activeTab === 'audit') loadAuditLogs();
-
-  if (state.activeWorkflowId && document.getElementById('workflow-detail-drawer').classList.contains('open')) {
-    openWorkflowDrawer(state.activeWorkflowId);
-  }
+function resetReplay() {
+  pauseReplay();
+  appState.replay.currentIndex = 0;
+  resetGraph();
+  document.getElementById('terminal-feed-container').innerHTML = '';
+  appState.events = [];
+  updateStreamStatus('COMPLETED ARCHIVE', false);
 }
 
 // ==========================================================================
-// Helpers & Utilities
+// 11. Human In The Loop Approval Actions
 // ==========================================================================
 
-function formatAge(dateStr) {
-  if (!dateStr) return '-';
+async function showApprovalBanner() {
+  const card = document.getElementById('approval-action-card');
+  card?.classList.remove('hidden');
+
   try {
-    const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
-    if (diff < 60) return `${diff}s ago`;
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-    return `${Math.floor(diff / 3600)}h ago`;
-  } catch {
-    return dateStr;
-  }
-}
-
-// ==========================================================================
-// App Initialization
-// ==========================================================================
-
-document.addEventListener('DOMContentLoaded', () => {
-  initTabs();
-
-  // Persona & Tenant Selectors
-  document.getElementById('persona-select').addEventListener('change', (e) => {
-    state.currentPersona = e.target.value;
-    showToast(`Switched persona to ${PERSONAS[state.currentPersona].name}`, 'info');
-    refreshCurrentView();
-  });
-
-  document.getElementById('tenant-select').addEventListener('change', (e) => {
-    state.currentTenant = e.target.value;
-    state.pageOffset = 0;
-    refreshCurrentView();
-  });
-
-  // Manual & Auto-refresh
-  document.getElementById('btn-manual-refresh').addEventListener('click', () => refreshCurrentView());
-  document.getElementById('auto-refresh-select').addEventListener('change', (e) => {
-    const val = parseInt(e.target.value, 10);
-    state.autoRefreshInterval = val;
-    if (state.autoRefreshTimer) clearInterval(state.autoRefreshTimer);
-    if (val > 0) {
-      state.autoRefreshTimer = setInterval(refreshCurrentView, val);
+    const res = await apiFetch(`/api/workflows/${appState.activeWorkflowId}/approvals`);
+    const pending = res.approvals?.[0];
+    if (pending) {
+      const details = document.getElementById('approval-details-box');
+      if (details) {
+        details.innerHTML = `Proposed Action: <code>${pending.action_tool || 'switch_risk_verification_model(strict_mode=True)'}</code>`;
+      }
+      appState.approval = pending;
     }
+  } catch (err) {
+    console.error('Failed to fetch pending approvals:', err);
+  }
+}
+
+function hideApprovalBanner() {
+  document.getElementById('approval-action-card')?.classList.add('hidden');
+}
+
+async function submitApprovalDecision(approved) {
+  if (!appState.activeWorkflowId || !appState.approval) return;
+
+  try {
+    await apiFetch(`/api/workflows/${appState.activeWorkflowId}/approve/${appState.approval.approval_id}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        approved,
+        reason: approved ? 'Operator authorized recovery action from Command Center' : 'Operator rejected action',
+      }),
+    });
+
+    hideApprovalBanner();
+    appendTerminalLine('OPERATOR', `Human Approval Decision: ${approved ? 'APPROVED' : 'REJECTED'}`, 'actor-system');
+    refreshFleetData();
+  } catch (err) {
+    alert(`Failed to submit approval: ${err.message}`);
+  }
+}
+
+// ==========================================================================
+// 12. Scenario Launching (Aha Moment Centerpiece)
+// ==========================================================================
+
+async function executeScenarioLaunch() {
+  const selectedRadio = document.querySelector('input[name="scenario_choice"]:checked');
+  const scenarioName = selectedRadio ? selectedRadio.value : 'billing_unavailable';
+
+  closeLaunchModal();
+
+  try {
+    appendTerminalLine('DISPATCH', `Initiating scenario '${scenarioName}'...`, 'actor-system');
+    showCinematicIncident(scenarioName);
+
+    const res = await apiFetch(`/api/scenarios/${scenarioName}`, { method: 'POST' });
+    const wfId = res.workflow_id;
+
+    appendTerminalLine('SYSTEM', `Workflow created (${wfId.slice(0, 8)}). Starting autonomous recovery loop...`, 'actor-detect');
+
+    await refreshFleetData();
+    selectWorkflow(wfId);
+  } catch (err) {
+    alert(`Failed to launch scenario: ${err.message}`);
+  }
+}
+
+function openLaunchModal() {
+  document.getElementById('modal-scenario-launcher')?.classList.remove('hidden');
+}
+
+function closeLaunchModal() {
+  document.getElementById('modal-scenario-launcher')?.classList.add('hidden');
+}
+
+function updateScenarioCtaText(scenarioValue) {
+  const cta = document.getElementById('modal-launch-cta-text');
+  if (!cta) return;
+
+  if (scenarioValue === 'billing_unavailable') {
+    cta.textContent = '⚡ RUN AUTONOMOUS RECOVERY';
+  } else if (scenarioValue === 'contradictory_evidence') {
+    cta.textContent = '⚡ TEST AUTONOMY BOUNDARY';
+  } else if (scenarioValue === 'worker_interruption') {
+    cta.textContent = '⚡ TEST RESILIENCE';
+  }
+}
+
+// ==========================================================================
+// 13. Presentation Demo Mode & Navigation
+// ==========================================================================
+
+function toggleDemoMode() {
+  appState.isDemoMode = !appState.isDemoMode;
+  const grid = document.getElementById('main-workspace-grid');
+  const btn = document.getElementById('btn-toggle-demo-mode');
+
+  if (appState.isDemoMode) {
+    grid?.classList.add('demo-mode-active');
+    btn?.classList.add('active');
+  } else {
+    grid?.classList.remove('demo-mode-active');
+    btn?.classList.remove('active');
+  }
+}
+
+function highlightStageInInspector(stageId) {
+  const map = {
+    detect: 'audit-see',
+    reason: 'audit-think',
+    recover: 'audit-do',
+    verify: 'audit-know',
+    recovered: 'audit-know',
+  };
+
+  const targetId = map[stageId];
+  if (targetId) {
+    const el = document.getElementById(targetId);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('highlight-flash');
+      setTimeout(() => el.classList.remove('highlight-flash'), 1200);
+    }
+  }
+}
+
+// ==========================================================================
+// 14. Event Listeners & Bootstrapping
+// ==========================================================================
+
+function setupEventListeners() {
+  // Scenario Modal
+  document.getElementById('btn-launch-modal')?.addEventListener('click', openLaunchModal);
+  document.getElementById('btn-close-launcher')?.addEventListener('click', closeLaunchModal);
+  document.getElementById('btn-cancel-launcher')?.addEventListener('click', closeLaunchModal);
+  document.getElementById('btn-execute-scenario')?.addEventListener('click', executeScenarioLaunch);
+
+  // Keyboard Escape to close modal
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeLaunchModal();
   });
 
-  // Start initial auto-refresh timer
-  if (state.autoRefreshInterval > 0) {
-    state.autoRefreshTimer = setInterval(refreshCurrentView, state.autoRefreshInterval);
+  // Scenario Option selection in modal
+  document.querySelectorAll('.scenario-option').forEach((opt) => {
+    opt.addEventListener('click', () => {
+      document.querySelectorAll('.scenario-option').forEach((o) => o.classList.remove('selected'));
+      opt.classList.add('selected');
+      const radio = opt.querySelector('input[type="radio"]');
+      if (radio) {
+        radio.checked = true;
+        updateScenarioCtaText(radio.value);
+      }
+    });
+  });
+
+  // Demo Mode Toggle
+  document.getElementById('btn-toggle-demo-mode')?.addEventListener('click', toggleDemoMode);
+
+  // View Fleet scroll helper
+  document.getElementById('btn-view-fleet')?.addEventListener('click', () => {
+    if (appState.isDemoMode) toggleDemoMode();
+    document.getElementById('incident-list-container')?.scrollIntoView({ behavior: 'smooth' });
+  });
+
+  // Graph Node Clicks -> Scroll to inspector question
+  document.querySelectorAll('.agent-node').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const stage = btn.dataset.stage;
+      highlightStageInInspector(stage);
+    });
+  });
+
+  // Replay Controls
+  document.getElementById('btn-replay-play')?.addEventListener('click', startReplay);
+  document.getElementById('btn-replay-pause')?.addEventListener('click', pauseReplay);
+  document.getElementById('btn-replay-step')?.addEventListener('click', stepReplay);
+  document.getElementById('btn-replay-reset')?.addEventListener('click', resetReplay);
+
+  // Approvals
+  document.getElementById('btn-submit-approval')?.addEventListener('click', () => submitApprovalDecision(true));
+  document.getElementById('btn-submit-rejection')?.addEventListener('click', () => submitApprovalDecision(false));
+
+  // Refresh
+  document.getElementById('btn-refresh-data')?.addEventListener('click', refreshFleetData);
+
+  // Filter Pills
+  document.querySelectorAll('.filter-pill').forEach((pill) => {
+    pill.addEventListener('click', () => {
+      document.querySelectorAll('.filter-pill').forEach((p) => p.classList.remove('active'));
+      pill.classList.add('active');
+      appState.activeFilter = pill.dataset.filter;
+      renderIncidentList();
+    });
+  });
+
+  // Search
+  document.getElementById('incident-search-input')?.addEventListener('input', renderIncidentList);
+
+  // Persona / Tenant Change
+  document.getElementById('persona-select')?.addEventListener('change', (e) => {
+    appState.auth.persona = e.target.value;
+    sessionStorage.clear();
+    refreshFleetData();
+  });
+
+  document.getElementById('tenant-select')?.addEventListener('change', (e) => {
+    appState.auth.tenant = e.target.value;
+    sessionStorage.clear();
+    refreshFleetData();
+  });
+
+  // Clear Terminal
+  document.getElementById('btn-clear-terminal')?.addEventListener('click', () => {
+    document.getElementById('terminal-feed-container').innerHTML = '';
+    appState.events = [];
+    updateEventCount();
+  });
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// Bootstrapping
+window.addEventListener('DOMContentLoaded', async () => {
+  setupEventListeners();
+  await refreshFleetData();
+
+  if (appState.workflowsList.length > 0) {
+    selectWorkflow(appState.workflowsList[0].workflow_id);
   }
 
-  // Filters & Search
-  document.getElementById('filter-state-select').addEventListener('change', () => { state.pageOffset = 0; loadWorkflows(); });
-  document.getElementById('filter-scenario-select').addEventListener('change', () => { state.pageOffset = 0; loadWorkflows(); });
-  document.getElementById('filter-stuck-only').addEventListener('change', () => { state.pageOffset = 0; loadWorkflows(); });
-  document.getElementById('workflow-search-input').addEventListener('input', () => { state.pageOffset = 0; loadWorkflows(); });
-  document.getElementById('filter-audit-event-type').addEventListener('change', loadAuditLogs);
-  document.getElementById('audit-search-input').addEventListener('input', loadAuditLogs);
-
-  // Pagination
-  document.getElementById('btn-prev-page').addEventListener('click', () => {
-    state.pageOffset = Math.max(0, state.pageOffset - state.pageLimit);
-    loadWorkflows();
-  });
-  document.getElementById('btn-next-page').addEventListener('click', () => {
-    state.pageOffset += state.pageLimit;
-    loadWorkflows();
-  });
-
-  // Drawer Controls
-  document.getElementById('btn-close-drawer').addEventListener('click', closeDrawer);
-  document.getElementById('btn-drawer-diagnose').addEventListener('click', () => openDiagnosticsModal(state.activeWorkflowId));
-  document.getElementById('btn-drawer-recover').addEventListener('click', () => {
-    openRecoverModal(state.activeWorkflowId, state.activeWorkflowSnapshot?.workflow?.version || 1);
-  });
-  document.getElementById('btn-drawer-approve').addEventListener('click', () => openApproveModal(state.activeWorkflowId));
-  document.getElementById('btn-drawer-cancel').addEventListener('click', () => openCancelModal(state.activeWorkflowId));
-
-  // Modal Closers
-  document.querySelectorAll('[data-close]').forEach(btn => {
-    btn.addEventListener('click', closeModals);
-  });
-
-  // Modal Action Buttons
-  document.getElementById('btn-confirm-recover').addEventListener('click', handleRecoverSubmit);
-  document.getElementById('btn-confirm-approval').addEventListener('click', () => handleApproveSubmit(true));
-  document.getElementById('btn-reject-approval').addEventListener('click', () => handleApproveSubmit(false));
-  document.getElementById('btn-confirm-cancel').addEventListener('click', handleCancelSubmit);
-  document.getElementById('btn-open-launch').addEventListener('click', () => document.getElementById('modal-launch').classList.add('open'));
-  document.getElementById('btn-confirm-launch').addEventListener('click', handleLaunchScenario);
-  document.getElementById('btn-refresh-stuck').addEventListener('click', loadStuckWorkflows);
-
-  // Initial Load
-  loadFleetOverview();
+  appState.autoRefreshTimer = setInterval(refreshFleetData, 10000);
 });

@@ -3,497 +3,625 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>RecoveryOS — Operator Control Plane</title>
+  <title>RecoveryOS — Operator Control Plane & Autonomous Command Center</title>
+  <meta name="description" content="RecoveryOS: Autonomous operations engine that observes failures, reasons about root causes, executes recovery tools, and verifies outcome recovery.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/console/styles.css">
 </head>
-<body>
-  <div id="app" class="app-shell">
-    <!-- Top Header Navigation -->
-    <header class="top-nav">
-      <div class="nav-brand">
-        <div class="brand-logo">
-          <div class="logo-core"></div>
+<body class="dark-theme">
+  <div id="app" class="command-center-shell">
+    
+    <!-- Top Mission Control Navigation Bar -->
+    <header class="mission-header">
+      <div class="header-left">
+        <div class="brand-badge">
+          <div class="pulse-beacon">
+            <span class="beacon-core"></span>
+            <span class="beacon-wave"></span>
+          </div>
+          <div class="brand-titles">
+            <span class="brand-title">RECOVERY<span class="brand-glow">OS</span></span>
+            <span class="brand-sub">AUTONOMOUS OPERATIONS COMMAND CENTER</span>
+          </div>
         </div>
-        <div class="brand-text">
-          <span class="brand-name">Recovery<span class="brand-accent">OS</span></span>
-          <span class="brand-tag">Operator Console</span>
-        </div>
-        <div class="system-status-indicator" id="system-status-indicator" title="API System Health">
-          <span class="status-dot healthy"></span>
-          <span class="status-text">ONLINE</span>
+
+        <div class="system-health-pill" id="system-health-indicator">
+          <span class="status-dot online"></span>
+          <span class="status-label">AUTONOMOUS RECOVERY ENGINE</span>
+          <span class="status-meta">ONLINE</span>
         </div>
       </div>
 
-      <div class="nav-controls">
-        <!-- Persona / Role Selector -->
-        <div class="control-group">
-          <label for="persona-select">Persona / Role</label>
-          <select id="persona-select" class="nav-select">
-            <option value="operator" selected>Operator (operator-1 • OPERATOR)</option>
-            <option value="admin">Administrator (admin-1 • ADMIN)</option>
-            <option value="approver">Approver (approver-1 • APPROVER)</option>
-            <option value="viewer">Auditor (viewer-1 • VIEWER)</option>
-          </select>
+      <div class="header-right">
+        <!-- Live SSE Stream Status -->
+        <div class="stream-pill" id="stream-status-pill">
+          <span class="stream-dot connected"></span>
+          <span class="stream-text" id="stream-status-text">● LIVE EXECUTION</span>
         </div>
 
+        <!-- Presentation Demo Mode Toggle -->
+        <button id="btn-toggle-demo-mode" class="demo-mode-btn" title="Toggle Presentation Grade Demo Mode">
+          <span class="demo-bolt">⚡</span>
+          <span class="demo-label" id="demo-mode-label">DEMO MODE • LIVE BACKEND</span>
+        </button>
+
         <!-- Tenant Scope Selector -->
-        <div class="control-group">
-          <label for="tenant-select">Tenant Scope</label>
-          <select id="tenant-select" class="nav-select">
+        <div class="control-box">
+          <label for="tenant-select" class="control-label">TENANT</label>
+          <select id="tenant-select" class="cc-select">
             <option value="tenant-default" selected>tenant-default</option>
             <option value="tenant-acme">tenant-acme</option>
             <option value="tenant-globex">tenant-globex</option>
-            <option value="all">All Tenants (Admin only)</option>
           </select>
         </div>
 
-        <!-- Auto-Refresh Toggle -->
-        <div class="control-group refresh-group">
-          <button id="btn-manual-refresh" class="btn-icon" title="Refresh Now">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-          </button>
-          <select id="auto-refresh-select" class="nav-select compact">
-            <option value="5000">Auto 5s</option>
-            <option value="15000" selected>Auto 15s</option>
-            <option value="30000">Auto 30s</option>
-            <option value="0">Manual</option>
+        <!-- Persona / Role Selector -->
+        <div class="control-box">
+          <label for="persona-select" class="control-label">PERSONA</label>
+          <select id="persona-select" class="cc-select">
+            <option value="operator" selected>operator-1 (OPERATOR)</option>
+            <option value="admin">admin-1 (ADMIN)</option>
+            <option value="approver">approver-1 (APPROVER)</option>
+            <option value="viewer">viewer-1 (VIEWER)</option>
           </select>
         </div>
+
+        <!-- Refresh Button -->
+        <button id="btn-refresh-data" class="cc-icon-btn" title="Refresh Telemetry">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+        </button>
       </div>
     </header>
 
-    <!-- Main Navigation Tabs -->
-    <nav class="main-tabs">
-      <button class="tab-btn active" data-tab="fleet">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-        <span>Fleet Overview</span>
-      </button>
-      <button class="tab-btn" data-tab="workflows">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-        <span>Workflow Explorer</span>
-        <span class="tab-badge" id="badge-workflow-count">0</span>
-      </button>
-      <button class="tab-btn" data-tab="stuck">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        <span>Stuck & Recovery Hub</span>
-        <span class="tab-badge alert" id="badge-stuck-count">0</span>
-      </button>
-      <button class="tab-btn" data-tab="audit">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-        <span>Security & Audit Trail</span>
-      </button>
-      <div class="tab-actions">
-        <button id="btn-open-launch" class="btn btn-primary">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-          <span>Launch Scenario</span>
+    <!-- Hero Ribbon / Live Autonomous HUD -->
+    <section class="hero-ribbon">
+      <div class="hero-story-block">
+        <div class="story-headline">
+          <span class="story-accent">AUTONOMOUS RECOVERY ENGINE:</span>
+          <span class="story-text">"When infrastructure fails, RecoveryOS doesn't just execute a playbook. It observes, reasons, acts, verifies — and proves recovery."</span>
+        </div>
+        <div class="hero-kpi-row">
+          <div class="kpi-unit">
+            <span class="kpi-num" id="kpi-active-incidents">0</span>
+            <span class="kpi-label">Active Workflows</span>
+          </div>
+          <div class="kpi-divider"></div>
+          <div class="kpi-unit">
+            <span class="kpi-num emerald" id="kpi-recovered-count">0</span>
+            <span class="kpi-label">Recovered OK</span>
+          </div>
+          <div class="kpi-divider"></div>
+          <div class="kpi-unit">
+            <span class="kpi-num amber" id="kpi-stuck-count">0</span>
+            <span class="kpi-label">Escalations</span>
+          </div>
+          <div class="kpi-divider"></div>
+          <div class="kpi-unit">
+            <span class="kpi-num cyan" id="kpi-total-workflows">0</span>
+            <span class="kpi-label">Total Fleet Runs</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="hero-actions-primary">
+        <button id="btn-launch-modal" class="btn-simulate-incident pulse-glow">
+          <div class="btn-flash-row">
+            <span class="btn-icon-flash">⚡</span>
+            <span class="btn-text-main">SIMULATE AN INCIDENT</span>
+          </div>
+          <span class="btn-subtext">Trigger Real Autonomous Recovery Demo</span>
+        </button>
+        <button id="btn-view-fleet" class="btn-secondary-fleet">
+          <span>📡 VIEW LIVE FLEET</span>
         </button>
       </div>
-    </nav>
+    </section>
 
-    <!-- Main Content Area -->
-    <main class="main-content">
-      <!-- TAB 1: Fleet Overview -->
-      <section id="tab-fleet" class="tab-pane active">
-        <div class="kpi-grid">
-          <div class="kpi-card">
-            <div class="kpi-header">
-              <span class="kpi-title">TOTAL WORKFLOWS</span>
-              <div class="kpi-icon icon-cyan">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-              </div>
-            </div>
-            <div class="kpi-value" id="kpi-total-workflows">0</div>
-            <div class="kpi-subtext">Across active tenant scope</div>
+    <!-- Main 3-Column Command Center Workspace -->
+    <main class="workspace-grid" id="main-workspace-grid">
+      
+      <!-- COLUMN 1: Fleet Incident Stream & Operational Memory (Collapsible in Demo Mode) -->
+      <aside class="panel col-incidents" id="panel-incident-stream">
+        <div class="panel-header">
+          <div class="panel-title-wrap">
+            <span class="panel-icon">📋</span>
+            <h2 class="panel-title">OPERATIONAL MEMORY &amp; INCIDENTS</h2>
           </div>
-
-          <div class="kpi-card alert-stuck">
-            <div class="kpi-header">
-              <span class="kpi-title">STUCK / STALLED</span>
-              <div class="kpi-icon icon-amber">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-              </div>
-            </div>
-            <div class="kpi-value" id="kpi-stuck-workflows">0</div>
-            <div class="kpi-subtext">Requires operator recovery / redrive</div>
-          </div>
-
-          <div class="kpi-card alert-approvals">
-            <div class="kpi-header">
-              <span class="kpi-title">PENDING APPROVALS</span>
-              <div class="kpi-icon icon-purple">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
-              </div>
-            </div>
-            <div class="kpi-value" id="kpi-pending-approvals">0</div>
-            <div class="kpi-subtext">Human-in-the-loop decisions waiting</div>
-          </div>
-
-          <div class="kpi-card">
-            <div class="kpi-header">
-              <span class="kpi-title">ESCALATED / FAILED</span>
-              <div class="kpi-icon icon-rose">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-              </div>
-            </div>
-            <div class="kpi-value" id="kpi-escalated-workflows">0</div>
-            <div class="kpi-subtext">Terminal safety stops</div>
-          </div>
-
-          <div class="kpi-card">
-            <div class="kpi-header">
-              <span class="kpi-title">COMPLETED OK</span>
-              <div class="kpi-icon icon-emerald">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-              </div>
-            </div>
-            <div class="kpi-value" id="kpi-completed-workflows">0</div>
-            <div class="kpi-subtext">Outcome verified & finalized</div>
+          <div class="filter-pills">
+            <button class="filter-pill active" data-filter="all">ALL</button>
+            <button class="filter-pill" data-filter="running">ACTIVE</button>
+            <button class="filter-pill" data-filter="completed">RECOVERED</button>
+            <button class="filter-pill" data-filter="approvals">APPROVALS</button>
           </div>
         </div>
 
-        <!-- Fleet State Distribution & System Architecture Status -->
-        <div class="dashboard-grid">
-          <div class="panel">
-            <div class="panel-header">
-              <h3>Lifecycle State Distribution</h3>
+        <div class="search-bar">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="incident-search-input" placeholder="Search workflow ID, customer, scenario..." />
+        </div>
+
+        <div class="incident-card-list" id="incident-list-container">
+          <!-- Populated dynamically by app.js -->
+          <div class="empty-feed">
+            <div class="empty-icon">📡</div>
+            <div class="empty-title">Scanning Fleet Telemetry...</div>
+            <div class="empty-sub">Workflows will appear here automatically.</div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- COLUMN 2: The Agentic Orchestration Canvas (The Hero Centerpiece) -->
+      <section class="panel col-orchestration" id="panel-orchestration-canvas">
+        
+        <!-- Live Incident Emergency Ribbon (Active during failure recovery) -->
+        <div class="incident-cinematic-banner hidden" id="incident-cinematic-banner">
+          <div class="cinematic-left">
+            <div class="alert-pulse-icon">⚠️</div>
+            <div class="cinematic-text-wrap">
+              <div class="cinematic-title" id="cinematic-incident-title">INCIDENT DETECTED: BILLING PROVIDER UNAVAILABLE</div>
+              <div class="cinematic-desc" id="cinematic-incident-desc">Stripe API latency spike (HTTP 500). Autonomous Recovery Agent engaged.</div>
             </div>
-            <div class="panel-body">
-              <div class="state-distribution-bar" id="state-distribution-bar">
-                <div class="bar-segment state-created" style="width: 0%" title="CREATED"></div>
-                <div class="bar-segment state-executing" style="width: 0%" title="EXECUTING"></div>
-                <div class="bar-segment state-awaiting" style="width: 0%" title="AWAITING_APPROVAL"></div>
-                <div class="bar-segment state-recovering" style="width: 0%" title="RECOVERING"></div>
-                <div class="bar-segment state-escalated" style="width: 0%" title="ESCALATED"></div>
-                <div class="bar-segment state-completed" style="width: 0%" title="COMPLETED"></div>
-              </div>
-              <div class="state-legend" id="state-legend"></div>
+          </div>
+          <div class="cinematic-right">
+            <span class="telemetry-badge red" id="cinematic-metric-1">ERROR RATE: 100%</span>
+            <span class="telemetry-badge amber" id="cinematic-metric-2">LATENCY: &gt; 5000ms</span>
+          </div>
+        </div>
+
+        <!-- "What Just Happened?" Live Narrative Story Bar -->
+        <div class="story-lifecycle-bar" id="story-lifecycle-bar">
+          <div class="story-step done" id="narrative-step-1">FAILURE DETECTED</div>
+          <span class="story-arrow">→</span>
+          <div class="story-step" id="narrative-step-2">ROOT CAUSE CORRELATED</div>
+          <span class="story-arrow">→</span>
+          <div class="story-step" id="narrative-step-3">RECOVERY AUTHORIZED</div>
+          <span class="story-arrow">→</span>
+          <div class="story-step" id="narrative-step-4">RECOVERY EXECUTED</div>
+          <span class="story-arrow">→</span>
+          <div class="story-step" id="narrative-step-5">OUTCOME VERIFIED</div>
+          <span class="story-arrow">→</span>
+          <div class="story-step" id="narrative-step-6">SYSTEM RECOVERED</div>
+        </div>
+
+        <!-- Canvas Header & Replay Controls -->
+        <div class="canvas-header-bar">
+          <div class="canvas-title-group">
+            <span class="canvas-icon">🤖</span>
+            <div class="canvas-heading-wrap">
+              <span class="canvas-main-title">AUTONOMOUS ORCHESTRATION PIPELINE</span>
+              <span class="canvas-active-name" id="canvas-incident-name">SELECT OR SIMULATE AN INCIDENT</span>
             </div>
           </div>
 
-          <div class="panel">
-            <div class="panel-header">
-              <h3>Production Invariant Guarantees</h3>
+          <!-- Replay Mode Toolbar -->
+          <div class="replay-toolbar hidden" id="replay-toolbar">
+            <span class="replay-label">↺ DECISION REPLAY • READ-ONLY:</span>
+            <button id="btn-replay-play" class="btn-replay-ctrl" title="Play Replay">▶ PLAY</button>
+            <button id="btn-replay-pause" class="btn-replay-ctrl hidden" title="Pause Replay">Ⅱ PAUSE</button>
+            <button id="btn-replay-step" class="btn-replay-ctrl" title="Step Forward">⏭ STEP</button>
+            <button id="btn-replay-reset" class="btn-replay-ctrl" title="Reset Replay">↺ RESET</button>
+          </div>
+        </div>
+
+        <!-- 5-Stage Agent Orchestration Graph (Interactive & Stage-Dominant) -->
+        <div class="agent-graph-card">
+          <div class="graph-header-meta">
+            <span class="graph-meta-title">AGENTIC RECOVERY LIFECYCLE</span>
+            <span class="graph-meta-status" id="graph-stage-label">IDLE • AWAITING TRIGGER</span>
+          </div>
+
+          <div class="agent-nodes-pipeline" id="agent-nodes-pipeline">
+            
+            <!-- Node 01: Detect -->
+            <button class="agent-node" id="node-detect" data-stage="detect" title="Click to view Detection Evidence">
+              <div class="node-icon-box">
+                <span class="node-num">01</span>
+                <span class="node-glyph">👁️</span>
+              </div>
+              <div class="node-info">
+                <div class="node-role">DETECT</div>
+                <div class="node-action" id="node-detect-action">Signal Observation</div>
+              </div>
+              <div class="node-status-badge" id="node-detect-badge">WAITING</div>
+            </button>
+
+            <div class="pipeline-connector" id="conn-1-2">
+              <div class="connector-line"></div>
             </div>
-            <div class="panel-body">
-              <ul class="guarantee-list">
-                <li>
-                  <span class="check-icon">✓</span>
-                  <div><strong>Deterministic OCC Fencing:</strong> Every mutation verified against version $V$ before advance.</div>
-                </li>
-                <li>
-                  <span class="check-icon">✓</span>
-                  <div><strong>Distributed Operation Claims:</strong> 60s lease locks eliminate multi-worker race conditions.</div>
-                </li>
-                <li>
-                  <span class="check-icon">✓</span>
-                  <div><strong>Durable State Before ACK:</strong> Changes persisted to Firestore before message acknowledgement.</div>
-                </li>
-                <li>
-                  <span class="check-icon">✓</span>
-                  <div><strong>Terminal Immutability:</strong> COMPLETED and ESCALATED workflows strictly drop mutations.</div>
-                </li>
-              </ul>
+
+            <!-- Node 02: Reason -->
+            <button class="agent-node" id="node-reason" data-stage="reason" title="Click to view Reasoning Diagnosis">
+              <div class="node-icon-box">
+                <span class="node-num">02</span>
+                <span class="node-glyph">🧠</span>
+              </div>
+              <div class="node-info">
+                <div class="node-role">REASON</div>
+                <div class="node-action" id="node-reason-action">Root Cause Diagnosis</div>
+              </div>
+              <div class="node-status-badge" id="node-reason-badge">WAITING</div>
+            </button>
+
+            <div class="pipeline-connector" id="conn-2-3">
+              <div class="connector-line"></div>
+            </div>
+
+            <!-- Node 03: Recover / Act -->
+            <button class="agent-node" id="node-recover" data-stage="recover" title="Click to view Tool Execution">
+              <div class="node-icon-box">
+                <span class="node-num">03</span>
+                <span class="node-glyph">⚙️</span>
+              </div>
+              <div class="node-info">
+                <div class="node-role">ACT</div>
+                <div class="node-action" id="node-recover-action">Tool Execution</div>
+              </div>
+              <div class="node-status-badge" id="node-recover-badge">WAITING</div>
+            </button>
+
+            <div class="pipeline-connector" id="conn-3-4">
+              <div class="connector-line"></div>
+            </div>
+
+            <!-- Node 04: Verify -->
+            <button class="agent-node" id="node-verify" data-stage="verify" title="Click to view Verification Proof">
+              <div class="node-icon-box">
+                <span class="node-num">04</span>
+                <span class="node-glyph">🛡️</span>
+              </div>
+              <div class="node-info">
+                <div class="node-role">VERIFY</div>
+                <div class="node-action" id="node-verify-action">Outcome Verification</div>
+              </div>
+              <div class="node-status-badge" id="node-verify-badge">WAITING</div>
+            </button>
+
+            <div class="pipeline-connector" id="conn-4-5">
+              <div class="connector-line"></div>
+            </div>
+
+            <!-- Node 05: Recovered -->
+            <button class="agent-node outcome-node" id="node-recovered" data-stage="recovered" title="Click to view Final Outcome">
+              <div class="node-icon-box">
+                <span class="node-num">05</span>
+                <span class="node-glyph">✅</span>
+              </div>
+              <div class="node-info">
+                <div class="node-role">RECOVERED</div>
+                <div class="node-action" id="node-recovered-action">Zero-Downtime Restored</div>
+              </div>
+              <div class="node-status-badge" id="node-recovered-badge">STABLE</div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Action ≠ Recovery Visual Callout Banner -->
+        <div class="action-vs-recovery-pill" id="action-vs-recovery-pill">
+          <span class="pill-tag">CORE PRINCIPLE:</span>
+          <span class="pill-text">ACTION EXECUTED ≠ RECOVERY VERIFIED • Recovery requires independent verification of required outcomes</span>
+        </div>
+
+        <!-- Explicit Autonomy Decision Card -->
+        <div class="autonomy-decision-card" id="autonomy-decision-card">
+          <div class="decision-card-left">
+            <span class="decision-icon">⚖️</span>
+            <div class="decision-text-wrap">
+              <span class="decision-header-label">AUTONOMY DECISION</span>
+              <span class="decision-statement" id="decision-statement-text">✓ POLICY ALLOWS AUTONOMOUS FAILOVER • Confidence: HIGH • Constraint Violations: 0</span>
+            </div>
+          </div>
+          <span class="decision-badge pass" id="decision-badge-pill">AUTONOMOUS ACTION PERMITTED</span>
+        </div>
+
+        <!-- Human-In-The-Loop Autonomy Boundary Card (Rendered on Escalation) -->
+        <div class="approval-action-card hidden" id="approval-action-card">
+          <div class="approval-header">
+            <span class="approval-alert-icon">⚠️</span>
+            <div class="approval-titles">
+              <h3 class="approval-title">AUTONOMY BOUNDARY REACHED: HUMAN APPROVAL REQUIRED</h3>
+              <p class="approval-sub" id="approval-reason-text">RecoveryOS detected conflicting provider evidence. Autonomous execution safely halted to prevent duplicate mutation.</p>
+            </div>
+          </div>
+          <div class="approval-conflict-box" id="approval-conflict-box">
+            <div class="conflict-side">
+              <span class="side-tag">PROVIDER A (Experian):</span>
+              <span class="side-val">Risk Score 42 (APPROVED)</span>
+            </div>
+            <div class="conflict-vs">VS</div>
+            <div class="conflict-side">
+              <span class="side-tag">PROVIDER B (Equifax):</span>
+              <span class="side-val">Risk Score 88 (FLAGGED)</span>
+            </div>
+          </div>
+          <div class="approval-why-stopped">
+            <b>WHY WE STOPPED:</b> Policy requires human approval when evidence is contradictory across verification sources.
+          </div>
+          <div class="approval-details" id="approval-details-box">
+            Proposed Action: <code>switch_risk_verification_model(strict_mode=True)</code>
+          </div>
+          <div class="approval-controls">
+            <button id="btn-submit-approval" class="btn-approve">
+              <span>✓ AUTHORIZE RECOVERY ACTION</span>
+            </button>
+            <button id="btn-submit-rejection" class="btn-reject">
+              <span>✗ REJECT ACTION</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Worker Interruption Resilience Banner (Rendered for Worker Interruption) -->
+        <div class="worker-resilience-card hidden" id="worker-resilience-card">
+          <div class="resilience-header">
+            <span class="resilience-icon">🔄</span>
+            <div class="resilience-titles">
+              <h4 class="resilience-title">WORKER INTERRUPTION &amp; LEASE RECONCILIATION</h4>
+              <span class="resilience-sub">Execution lease expired (60s) → Replacement worker reconciled state against external services.</span>
+            </div>
+          </div>
+          <div class="resilience-badges-row">
+            <span class="r-badge pending">○ NO DUPLICATE EXECUTION</span>
+            <span class="r-badge pending">○ NO STATE CORRUPTION</span>
+            <span class="r-badge pending">○ NO DOUBLE BILLING</span>
+          </div>
+        </div>
+
+        <!-- Live Tool Execution Visualizer Card -->
+        <div class="tool-execution-card hidden" id="tool-execution-card">
+          <div class="tool-card-header">
+            <span class="tool-icon">⚡</span>
+            <span class="tool-title">TOOL EXECUTION IN-FLIGHT</span>
+            <span class="tool-status-tag" id="tool-status-tag">EXECUTING</span>
+          </div>
+          <div class="tool-card-body">
+            <div class="tool-row">
+              <span class="t-key">TOOL:</span>
+              <span class="t-val mono cyan" id="tool-name-val">switch_payment_gateway</span>
+            </div>
+            <div class="tool-row">
+              <span class="t-key">ARGS:</span>
+              <span class="t-val mono" id="tool-args-val">{"provider": "adyen", "reason": "primary_provider_outage"}</span>
+            </div>
+            <div class="tool-row">
+              <span class="t-key">IDEMPOTENCY KEY:</span>
+              <span class="t-val mono dim" id="tool-idemp-val">op_dispatch_708b_v1</span>
             </div>
           </div>
         </div>
+
+        <!-- Final Recovery Proof Certificate (Appears upon verified recovery) -->
+        <div class="recovery-proof-certificate hidden" id="recovery-proof-certificate">
+          <div class="proof-header">
+            <span class="proof-badge-icon">🛡️</span>
+            <div class="proof-header-titles">
+              <h4 class="proof-title">RECOVERY PROOF</h4>
+              <span class="proof-subtitle" id="proof-scenario-name">Billing Provider Unavailable • Autonomous Resolution</span>
+            </div>
+            <span class="proof-stamp">✓ VERIFIED RECOVERY</span>
+          </div>
+          <div class="proof-grid">
+            <div class="proof-item">
+              <span class="p-label">INCIDENT</span>
+              <span class="p-val" id="proof-incident-type">Billing Provider Unavailable</span>
+            </div>
+            <div class="proof-item">
+              <span class="p-label">ACTION</span>
+              <span class="p-val mono" id="proof-time-action">switch_payment_gateway</span>
+            </div>
+            <div class="proof-item">
+              <span class="p-label">VERIFICATION</span>
+              <span class="p-val mono emerald" id="proof-verification-text">Billing subscription probe → HTTP 200</span>
+            </div>
+            <div class="proof-item">
+              <span class="p-label">OPERATOR INTERVENTION</span>
+              <span class="p-val pass" id="proof-intervention">0</span>
+            </div>
+            <div class="proof-item">
+              <span class="p-label">MTTR</span>
+              <span class="p-val cyan" id="proof-mttr">5.2s</span>
+            </div>
+            <div class="proof-item">
+              <span class="p-label">OUTCOME CONTRACT</span>
+              <span class="p-val pass" id="proof-contract-status">✓ FULFILLED</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Agent Event Stream Terminal -->
+        <div class="live-terminal-card">
+          <div class="terminal-header">
+            <div class="terminal-title-wrap">
+              <span class="terminal-dot red"></span>
+              <span class="terminal-dot yellow"></span>
+              <span class="terminal-dot green"></span>
+              <span class="terminal-title">LIVE AGENT ACTIVITY &amp; REASONING STREAM</span>
+            </div>
+            <div class="terminal-meta">
+              <span id="terminal-event-count">0 EVENTS</span>
+              <button id="btn-clear-terminal" class="btn-terminal-clear">Clear</button>
+            </div>
+          </div>
+
+          <div class="terminal-feed" id="terminal-feed-container">
+            <div class="terminal-welcome">
+              <span class="prompt-prefix">recoveryos:~$</span> Autonomous operations engine watching telemetry. Click [⚡ SIMULATE AN INCIDENT] to trigger live recovery.
+            </div>
+          </div>
+        </div>
+
+        <!-- Judge-Facing "Why RecoveryOS?" Micro Panel -->
+        <div class="why-recoveryos-banner">
+          <div class="why-core-badge">WHY RECOVERYOS?</div>
+          <div class="why-text-wrap">
+            <span>Traditional automation executes scripts. <b>RecoveryOS observes → reasons → acts → verifies → learns from outcomes.</b> The system does not stop at "action executed" — it stops at "outcome verified."</span>
+          </div>
+        </div>
+
       </section>
 
-      <!-- TAB 2: Workflow Explorer -->
-      <section id="tab-workflows" class="tab-pane">
-        <div class="filter-bar">
-          <div class="search-box">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="text" id="workflow-search-input" placeholder="Search by Workflow ID or Customer Name...">
+      <!-- COLUMN 3: "Why Did You Do That?" Explainable Decision & Verification Inspector -->
+      <aside class="panel col-inspector" id="panel-inspector">
+        <div class="panel-header inspector-header">
+          <div class="panel-title-wrap">
+            <span class="panel-icon">🔍</span>
+            <h2 class="panel-title">WHY DID I DO THAT?</h2>
+          </div>
+          <div class="inspector-badge" id="inspector-badge">EXPLAINABLE AI AUDIT</div>
+        </div>
+
+        <div class="inspector-body" id="inspector-body-container">
+          
+          <!-- Narrative Summary Banner -->
+          <div class="decision-narrative-box" id="decision-narrative-box">
+            <div class="narrative-quote">"I detected repeated Stripe failures, confirmed the failure pattern against policy thresholds, switched to the configured secondary provider (Adyen), and verified recovery with a successful transaction probe."</div>
           </div>
 
-          <div class="filter-controls">
-            <select id="filter-state-select" class="nav-select">
-              <option value="">All States</option>
-              <option value="CREATED">CREATED</option>
-              <option value="EXECUTING">EXECUTING</option>
-              <option value="AWAITING_APPROVAL">AWAITING_APPROVAL</option>
-              <option value="RECOVERING">RECOVERING</option>
-              <option value="VERIFYING">VERIFYING</option>
-              <option value="COMPLETED">COMPLETED</option>
-              <option value="ESCALATED">ESCALATED</option>
-              <option value="UNKNOWN">UNKNOWN</option>
-            </select>
+          <!-- 4 Core Decision Audit Questions -->
+          <div class="four-questions-container">
+            
+            <!-- Question 1: What Did You See? -->
+            <div class="audit-card" id="audit-see">
+              <div class="audit-card-title">
+                <span class="q-num">01</span>
+                <span class="q-label">WHAT DID YOU SEE?</span>
+              </div>
+              <div class="audit-card-body" id="audit-see-body">
+                Stripe endpoint /v1/charges returned consecutive HTTP 500 timeouts across verification window.
+              </div>
+            </div>
 
-            <select id="filter-scenario-select" class="nav-select">
-              <option value="">All Scenarios</option>
-              <option value="billing_unavailable">billing_unavailable</option>
-              <option value="identity_service_down">identity_service_down</option>
-              <option value="risk_contradictory">risk_contradictory</option>
-              <option value="document_flapping">document_flapping</option>
-            </select>
+            <!-- Question 2: What Did You Think? -->
+            <div class="audit-card" id="audit-think">
+              <div class="audit-card-title">
+                <span class="q-num">02</span>
+                <span class="q-label">WHAT DID YOU THINK?</span>
+              </div>
+              <div class="audit-card-body" id="audit-think-body">
+                Primary provider is degraded. Secondary provider (Adyen) is healthy. Automated failover permitted by policy (0 violations).
+              </div>
+            </div>
 
-            <label class="toggle-control">
-              <input type="checkbox" id="filter-stuck-only">
-              <span>Stuck Only</span>
-            </label>
-          </div>
-        </div>
+            <!-- Question 3: What Did You Do? -->
+            <div class="audit-card" id="audit-do">
+              <div class="audit-card-title">
+                <span class="q-num">03</span>
+                <span class="q-label">WHAT DID YOU DO?</span>
+              </div>
+              <div class="audit-card-body" id="audit-do-body">
+                <code>switch_payment_gateway(provider="adyen")</code>
+              </div>
+            </div>
 
-        <!-- Workflows Data Table -->
-        <div class="table-container">
-          <table class="data-table" id="workflows-table">
-            <thead>
-              <tr>
-                <th>Workflow ID</th>
-                <th>Scenario / Name</th>
-                <th>State</th>
-                <th>OCC Version</th>
-                <th>Age</th>
-                <th>Tenant</th>
-                <th>Health / Lease</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody id="workflows-table-body">
-              <tr>
-                <td colspan="8" class="empty-state">Loading workflows...</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+            <!-- Question 4: How Do You Know It Worked? -->
+            <div class="audit-card highlight-emerald" id="audit-know">
+              <div class="audit-card-title">
+                <span class="q-num">04</span>
+                <span class="q-label">HOW DO YOU KNOW IT WORKED?</span>
+              </div>
+              <div class="audit-card-body" id="audit-know-body">
+                <div class="verify-badge-row">
+                  <span class="v-pill pass">✓ PROBE HTTP 200</span>
+                  <span class="v-pill pass">✓ SUBSCRIPTION ACTIVE</span>
+                </div>
+                <div class="criteria-checklist" id="inspect-criteria-checklist">
+                  <!-- Checklist populated dynamically -->
+                </div>
+              </div>
+            </div>
 
-        <!-- Pagination Bar -->
-        <div class="pagination-bar">
-          <span class="pagination-info" id="pagination-info">Showing 0 of 0</span>
-          <div class="pagination-buttons">
-            <button id="btn-prev-page" class="btn btn-secondary btn-sm" disabled>Previous</button>
-            <button id="btn-next-page" class="btn btn-secondary btn-sm" disabled>Next</button>
-          </div>
-        </div>
-      </section>
-
-      <!-- TAB 3: Stuck & Recovery Hub -->
-      <section id="tab-stuck" class="tab-pane">
-        <div class="stuck-hub-header">
-          <div>
-            <h2>Stuck Workflow Triage Hub</h2>
-            <p class="subtext">Auto-detected workflows in inactive or leased states requiring operator recovery action.</p>
-          </div>
-          <button id="btn-refresh-stuck" class="btn btn-secondary">Scan Now</button>
-        </div>
-
-        <div id="stuck-workflows-container" class="stuck-cards-grid">
-          <div class="empty-state">Scanning for stuck workflows...</div>
-        </div>
-      </section>
-
-      <!-- TAB 4: Security & Audit Trail -->
-      <section id="tab-audit" class="tab-pane">
-        <div class="filter-bar">
-          <div class="search-box">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="text" id="audit-search-input" placeholder="Filter by Actor, Action, or Workflow ID...">
           </div>
 
-          <div class="filter-controls">
-            <select id="filter-audit-event-type" class="nav-select">
-              <option value="">All Event Types</option>
-              <option value="PRIVILEGED_MUTATION">PRIVILEGED_MUTATION</option>
-              <option value="APPROVAL_ATTEMPT">APPROVAL_ATTEMPT</option>
-              <option value="SECURITY_DENIED">SECURITY_DENIED</option>
-              <option value="WORKFLOW_CREATION">WORKFLOW_CREATION</option>
-            </select>
+          <!-- Bottom Confidence Card -->
+          <div class="inspect-footer-meta">
+            <div class="meta-row">
+              <span class="meta-label">AUTONOMOUS CONFIDENCE</span>
+              <span class="meta-val high-conf" id="inspect-confidence">HIGH (99.2%)</span>
+            </div>
+            <div class="meta-row">
+              <span class="meta-label">VERIFICATION PROOF</span>
+              <span class="meta-val pass" id="inspect-proof-status">DETERMINISTIC VALIDATION</span>
+            </div>
           </div>
-        </div>
 
-        <div class="table-container">
-          <table class="data-table" id="audit-table">
-            <thead>
-              <tr>
-                <th>Timestamp (UTC)</th>
-                <th>Event Type</th>
-                <th>Actor</th>
-                <th>Role</th>
-                <th>Action</th>
-                <th>Workflow ID</th>
-                <th>Outcome</th>
-                <th>Reason / Detail</th>
-              </tr>
-            </thead>
-            <tbody id="audit-table-body">
-              <tr>
-                <td colspan="8" class="empty-state">Loading audit logs...</td>
-              </tr>
-            </tbody>
-          </table>
         </div>
-      </section>
+      </aside>
+
     </main>
 
-    <!-- Workflow Detail Drawer -->
-    <aside id="workflow-detail-drawer" class="drawer">
-      <div class="drawer-header">
-        <div class="drawer-title-group">
-          <span class="drawer-subtitle">WORKFLOW INSPECTOR</span>
-          <h2 id="drawer-workflow-id">wf-xxxx</h2>
-        </div>
-        <button id="btn-close-drawer" class="btn-icon">✕</button>
-      </div>
-
-      <div class="drawer-content">
-        <!-- Live Status Bar -->
-        <div class="drawer-status-banner" id="drawer-status-banner">
-          <div class="status-badge" id="drawer-state-badge">EXECUTING</div>
-          <div class="version-badge">OCC v<span id="drawer-occ-version">1</span></div>
-          <div class="tenant-badge"><span id="drawer-tenant-id">tenant-default</span></div>
-        </div>
-
-        <!-- Action Bar Inside Drawer -->
-        <div class="drawer-action-bar">
-          <button id="btn-drawer-diagnose" class="btn btn-secondary btn-sm">Inspect Diagnostics</button>
-          <button id="btn-drawer-recover" class="btn btn-primary btn-sm">Recover / Redrive</button>
-          <button id="btn-drawer-approve" class="btn btn-warning btn-sm" style="display: none;">Decide Approval</button>
-          <button id="btn-drawer-cancel" class="btn btn-danger btn-sm">Cancel / Escalate</button>
-        </div>
-
-        <!-- Outcome Contract Progress -->
-        <div class="drawer-section">
-          <h3>Outcome Contract Verification</h3>
-          <div id="drawer-outcomes-list" class="outcomes-list"></div>
-        </div>
-
-        <!-- Execution Steps Table -->
-        <div class="drawer-section">
-          <h3>Execution Steps</h3>
-          <div id="drawer-steps-list" class="steps-list"></div>
-        </div>
-
-        <!-- Live Server-Sent Events (SSE) Stream -->
-        <div class="drawer-section">
-          <div class="section-header-inline">
-            <h3>Live Event Stream (SSE)</h3>
-            <span class="stream-pulse" id="stream-pulse-indicator"></span>
-          </div>
-          <div class="terminal-container" id="drawer-events-terminal">
-            <div class="terminal-line system">Connecting to live SSE stream...</div>
-          </div>
-        </div>
-      </div>
-    </aside>
-
-    <!-- MODAL: Diagnostics Inspection -->
-    <div id="modal-diagnostics" class="modal">
-      <div class="modal-card">
+    <!-- MODAL: Simulate Incident (The Aha Moment Launcher) -->
+    <div class="modal-overlay hidden" id="modal-scenario-launcher">
+      <div class="modal-card launcher-modal">
         <div class="modal-header">
-          <h3>Workflow Operational Diagnostics</h3>
-          <button class="modal-close" data-close="modal-diagnostics">✕</button>
+          <div class="modal-title-wrap">
+            <span class="modal-icon">⚡</span>
+            <h3 class="modal-title">SIMULATE REAL-WORLD OPERATIONAL INCIDENT</h3>
+          </div>
+          <button class="btn-close-modal" id="btn-close-launcher">✕</button>
         </div>
-        <div class="modal-body" id="diagnostics-modal-body">
-          <div class="loading-spinner"></div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" data-close="modal-diagnostics">Close</button>
-          <button id="btn-diagnostics-quick-recover" class="btn btn-primary">Proceed to Recovery</button>
-        </div>
-      </div>
-    </div>
 
-    <!-- MODAL: Operator Recovery / Redrive -->
-    <div id="modal-recover" class="modal">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h3>Operator Workflow Recovery</h3>
-          <button class="modal-close" data-close="modal-recover">✕</button>
-        </div>
         <div class="modal-body">
-          <div class="callout callout-info">
-            <strong>Safe Recovery Protocol:</strong> Binds deterministically to current OCC version <span id="modal-recover-version" class="badge-code">v1</span> and dispatches an authenticated recovery event with fresh idempotency key.
-          </div>
-          <div class="form-group">
-            <label for="recover-reason-input">Operator Justification Reason (Required for Audit Trail)</label>
-            <textarea id="recover-reason-input" class="form-control" rows="3" placeholder="e.g. Cleared external billing service outage; redriving stalled step."></textarea>
-          </div>
-          <div class="form-group" id="recover-force-group" style="display: none;">
-            <label class="toggle-control">
-              <input type="checkbox" id="recover-force-checkbox">
-              <span>Force recovery on ESCALATED workflow (Admin Override)</span>
+          <p class="modal-subtext">Choose an infrastructure failure scenario. Watch RecoveryOS detect the fault, reason through diagnosis, execute recovery tools, and prove outcome verification.</p>
+
+          <div class="scenario-grid">
+            <!-- Scenario 1: Billing Unavailable (Primary Hero Demo) -->
+            <label class="scenario-option selected" data-scenario="billing_unavailable">
+              <input type="radio" name="scenario_choice" value="billing_unavailable" checked />
+              <div class="scenario-content">
+                <div class="scenario-top">
+                  <span class="scenario-badge badge-blue">SCENARIO 01 • AUTONOMOUS RECOVERY</span>
+                  <span class="scenario-name">Billing Provider Outage</span>
+                </div>
+                <p class="scenario-desc"><b>Failure:</b> Primary provider becomes unavailable (HTTP 500).<br/><b>Agent Behavior:</b> Provider failure → evidence correlation → policy approval → failover → deterministic verification.<br/><b>Human Intervention:</b> None.<br/><b>Expected Outcome:</b> Billing restored autonomously.</p>
+                <div class="scenario-flow">
+                  <span>Stripe 500 Outage</span> → <span>Autonomous Failover</span> → <span>Verified Subscription</span>
+                </div>
+              </div>
+            </label>
+
+            <!-- Scenario 2: Contradictory Evidence -->
+            <label class="scenario-option" data-scenario="contradictory_evidence">
+              <input type="radio" name="scenario_choice" value="contradictory_evidence" />
+              <div class="scenario-content">
+                <div class="scenario-top">
+                  <span class="scenario-badge badge-purple">SCENARIO 02 • BOUNDED AUTONOMY</span>
+                  <span class="scenario-name">Contradictory Evidence</span>
+                </div>
+                <p class="scenario-desc"><b>Failure:</b> Evidence conflicts across verification providers.<br/><b>Agent Behavior:</b> Conflicting evidence → unsafe autonomous action blocked → human approval required.<br/><b>Human Intervention:</b> Required.<br/><b>Expected Outcome:</b> Safe escalation at autonomy boundary.</p>
+                <div class="scenario-flow">
+                  <span>Conflicting Providers</span> → <span>Safe Escalation</span> → <span>Human Approval</span>
+                </div>
+              </div>
+            </label>
+
+            <!-- Scenario 3: Worker Interruption -->
+            <label class="scenario-option" data-scenario="worker_interruption">
+              <input type="radio" name="scenario_choice" value="worker_interruption" />
+              <div class="scenario-content">
+                <div class="scenario-top">
+                  <span class="scenario-badge badge-amber">SCENARIO 03 • RESILIENT EXECUTION</span>
+                  <span class="scenario-name">Worker Interruption</span>
+                </div>
+                <p class="scenario-desc"><b>Failure:</b> Worker container is terminated mid-flight.<br/><b>Agent Behavior:</b> Worker interruption → lease expiry → state reconciliation → safe resume.<br/><b>Human Intervention:</b> None.<br/><b>Expected Outcome:</b> Safe idempotent continuation without duplicate execution.</p>
+                <div class="scenario-flow">
+                  <span>Worker Killed</span> → <span>OCC Lease Timeout</span> → <span>Idempotent Safe Resume</span>
+                </div>
+              </div>
             </label>
           </div>
         </div>
+
         <div class="modal-footer">
-          <button class="btn btn-secondary" data-close="modal-recover">Cancel</button>
-          <button id="btn-confirm-recover" class="btn btn-primary">Dispatch Recovery</button>
+          <button class="btn-cancel" id="btn-cancel-launcher">Cancel</button>
+          <button class="btn-launch-confirm" id="btn-execute-scenario">
+            <span id="modal-launch-cta-text">⚡ RUN AUTONOMOUS RECOVERY</span>
+          </button>
         </div>
       </div>
     </div>
 
-    <!-- MODAL: Human Approval Decision (HITL) -->
-    <div id="modal-approve" class="modal">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h3>Human-in-the-Loop Approval Decision</h3>
-          <button class="modal-close" data-close="modal-approve">✕</button>
-        </div>
-        <div class="modal-body" id="modal-approve-body">
-          <!-- Populated dynamically -->
-        </div>
-        <div class="modal-footer">
-          <button id="btn-reject-approval" class="btn btn-danger">Reject Plan</button>
-          <button id="btn-confirm-approval" class="btn btn-success">Approve & Resume</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- MODAL: Cancel / Escalate Workflow -->
-    <div id="modal-cancel" class="modal">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h3>Cancel / Escalate Workflow</h3>
-          <button class="modal-close" data-close="modal-cancel">✕</button>
-        </div>
-        <div class="modal-body">
-          <div class="callout callout-warning">
-            <strong>Warning:</strong> This will terminate active execution and move the workflow state to <code>ESCALATED</code>. An immutable audit record will be logged.
-          </div>
-          <div class="form-group">
-            <label for="cancel-reason-input">Cancellation Reason (Mandatory)</label>
-            <textarea id="cancel-reason-input" class="form-control" rows="3" placeholder="e.g. Unrecoverable tenant customer data discrepancy."></textarea>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" data-close="modal-cancel">Back</button>
-          <button id="btn-confirm-cancel" class="btn btn-danger">Confirm Cancellation</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- MODAL: Launch Scenario -->
-    <div id="modal-launch" class="modal">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h3>Launch RecoveryOS Demo Scenario</h3>
-          <button class="modal-close" data-close="modal-launch">✕</button>
-        </div>
-        <div class="modal-body">
-          <div class="form-group">
-            <label for="scenario-select">Select Demo Failure Scenario</label>
-            <select id="scenario-select" class="form-control">
-              <option value="billing_unavailable" selected>billing_unavailable — External billing service 503 outage & retry</option>
-              <option value="identity_service_down">identity_service_down — Upstream ID verification service downtime</option>
-              <option value="risk_contradictory">risk_contradictory — Conflicting risk evidence triggering HITL approval</option>
-              <option value="document_flapping">document_flapping — Flapping document validator requiring OCC lease recovery</option>
-            </select>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" data-close="modal-launch">Cancel</button>
-          <button id="btn-confirm-launch" class="btn btn-primary">Launch Scenario</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Toast Notification Container -->
-    <div id="toast-container" class="toast-container"></div>
   </div>
 
-  <script type="module" src="/console/app.js"></script>
+  <script src="/console/app.js" type="module"></script>
 </body>
 </html>

@@ -102,6 +102,15 @@ STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 if os.path.exists(STATIC_DIR):
     app.mount("/console", StaticFiles(directory=STATIC_DIR, html=True), name="console")
 
+
+@app.get("/")
+async def root():
+    """Root route serving the RecoveryOS Operator Command Center."""
+    index_file = os.path.join(STATIC_DIR, "index.html")
+    if os.path.exists(index_file):
+        return FileResponse(index_file)
+    return {"service": "RecoveryOS", "status": "healthy", "console": "/console"}
+
 _event_publisher: BaseEventPublisher | None = None
 
 

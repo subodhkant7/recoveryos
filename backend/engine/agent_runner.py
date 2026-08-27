@@ -64,7 +64,8 @@ OUTCOME CONTRACT — Required Outcomes:
     if prohibited:
         prompt += "\nPROHIBITED OUTCOMES:\n"
         for p in prohibited:
-            prompt += f"- ⛔ NEVER: {p['description']}\n"
+            desc = p.get("description", p) if isinstance(p, dict) else str(p)
+            prompt += f"- ⛔ NEVER: {desc}\n"
 
     if completed_steps:
         prompt += "\nALREADY COMPLETED STEPS:\n"
