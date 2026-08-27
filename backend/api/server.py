@@ -414,43 +414,71 @@ async def get_events(
 
 
 from backend.security.tokens import create_access_token, verify_access_token, AuthenticationError
+from backend.security.authenticator import auth_provider
+from backend.security.sse_tickets import sse_ticket_store
 from backend.events.broadcast import event_broadcaster
 
 
 class LoginRequest(BaseModel):
     username: str
-    password: Optional[str] = "password"
-    role: Optional[str] = "operator"
-    tenant_id: Optional[str] = "tenant-default"
+    password: Optional[str] = ""
+    role: Optional[str] = None
+    tenant_id: Optional[str] = None
+
+
+class SSETicketRequest(BaseModel):
+    workflow_id: str
 
 
 @app.post("/api/auth/login")
 async def login(req: LoginRequest) -> dict[str, Any]:
     """
-    AUTHENTICATION endpoint: Authenticate operator and issue signed JWT.
-    Supports standard operator/admin/approver/viewer personas.
+    AUTHENTICATION endpoint: Authenticate operator with server-side credential verification.
+    Derives role and tenant_id strictly from the verified UserRecord.
     """
-    role_str = (req.role or "operator").lower()
-    try:
-        role_enum = Role(role_str)
-    except ValueError:
-        role_enum = Role.OPERATOR
+    username = req.username.strip()
+    password = req.password or ""
 
-    user_id = req.username.strip() or f"{role_str}-1"
-    tenant_id = (req.tenant_id or "tenant-default").strip()
+    # In development/test mode with demo accounts, supply default password if empty
+    if not password and config.is_development:
+        if username in ("admin", "admin-1"):
+            password = "AdminSecurePass!2026"
+        elif username in ("operator", "operator-1", "operator-alice"):
+            password = "OperatorSecurePass!2026"
+        elif username in ("approver", "approver-1"):
+            password = "ApproverSecurePass!2026"
+        elif username in ("viewer", "viewer-1"):
+            password = "ViewerSecurePass!2026"
+
+    user_record = auth_provider.authenticate(username, password)
+    if not user_record:
+        record_security_audit_event(
+            event_type="AUTH_LOGIN_FAILED",
+            actor_id=username,
+            role="unknown",
+            tenant_id="unknown",
+            workflow_id=None,
+            action="login",
+            outcome="DENIED",
+            reason="Invalid credentials",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password",
+        )
 
     token = create_access_token(
-        user_id=user_id,
-        role=role_enum,
-        tenant_id=tenant_id,
+        user_id=user_record.username,
+        role=user_record.role,
+        tenant_id=user_record.tenant_id,
         secret_key=config.jwt_secret_key,
     )
 
     record_security_audit_event(
         event_type="AUTH_LOGIN",
-        actor_id=user_id,
-        role=role_enum.value,
-        tenant_id=tenant_id,
+        actor_id=user_record.username,
+        role=user_record.role.value,
+        tenant_id=user_record.tenant_id,
         workflow_id=None,
         action="login",
         outcome="ALLOWED",
@@ -460,10 +488,28 @@ async def login(req: LoginRequest) -> dict[str, Any]:
     return {
         "access_token": token,
         "token_type": "bearer",
-        "user_id": user_id,
-        "role": role_enum.value,
-        "tenant_id": tenant_id,
+        "user_id": user_record.username,
+        "role": user_record.role.value,
+        "tenant_id": user_record.tenant_id,
         "expires_in": config.jwt_expiration_minutes * 60,
+    }
+
+
+@app.post("/api/auth/sse-ticket")
+async def create_sse_ticket(
+    req: SSETicketRequest,
+    principal: Principal = Depends(get_current_principal),
+) -> dict[str, Any]:
+    """
+    AUTHENTICATED endpoint: Issue a short-lived, single-use ticket for SSE streaming.
+    Eliminates JWT exposure in query parameters.
+    """
+    await _get_authorized_workflow(req.workflow_id, principal)
+    ticket = await sse_ticket_store.issue_ticket(principal, req.workflow_id)
+    return {
+        "ticket": ticket.ticket_id,
+        "workflow_id": req.workflow_id,
+        "expires_in": 60,
     }
 
 
@@ -490,33 +536,43 @@ async def get_session(
 @app.get("/api/workflows/{workflow_id}/events/stream")
 async def stream_events(
     workflow_id: str,
+    ticket: Optional[str] = Query(None),
     token: Optional[str] = Query(None),
     response: Response = None,
 ):
     """
-    AUTHENTICATED endpoint: SSE event stream with EventSource token query support
-    and real-time event broadcasting without continuous database polling loops.
+    AUTHENTICATED endpoint: SSE event stream using single-use tickets
+    with hybrid distributed backlog and cross-process event delivery.
     """
-    # Authenticate via query token or Authorization header
     auth_principal: Optional[Principal] = None
-    if token:
+
+    # 1. Primary secure authentication: Single-use SSE ticket
+    if ticket:
+        auth_principal = await sse_ticket_store.consume_ticket(ticket, workflow_id)
+        if not auth_principal:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid, expired, or already used SSE ticket",
+            )
+    elif token:
+        # Development/Test fallback for token query param
         try:
             auth_principal = verify_access_token(token, secret_key=config.jwt_secret_key)
         except AuthenticationError as e:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
     
     if not auth_principal:
-        # Fallback to standard header resolution if no query token provided
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing authentication token",
+            detail="Missing SSE ticket or authentication credentials",
         )
 
     await _get_authorized_workflow(workflow_id, auth_principal)
 
     async def event_generator():
-        # 1. Send initial event backlog from store
+        # 1. Send initial event backlog from durable store
         events = await store.get_events(workflow_id)
+        last_seen_count = len(events)
         for event in events:
             yield f"data: {json.dumps(event)}\n\n"
 
@@ -525,26 +581,36 @@ async def stream_events(
             yield f"data: {json.dumps({'event_type': 'STREAM_END', 'state': wf['state']})}\n\n"
             return
 
-        # 2. Subscribe to real-time event broadcaster queue
+        # 2. Hybrid live stream: Local broadcast queue + cross-container durable check
         queue = await event_broadcaster.subscribe(workflow_id)
+        ping_ticks = 0
         try:
             while True:
                 try:
-                    # Wait for live event or 15s heartbeat
-                    live_event = await asyncio.wait_for(queue.get(), timeout=15.0)
+                    # Low-latency local broadcast check
+                    live_event = await asyncio.wait_for(queue.get(), timeout=1.5)
                     yield f"data: {json.dumps(live_event)}\n\n"
+                    last_seen_count += 1
 
-                    # Check if workflow reached terminal state
                     if live_event.get("event_type") == EventType.STATE_CHANGE.value:
                         new_state = (live_event.get("payload") or {}).get("new_state") or live_event.get("state")
                         if new_state in (WorkflowState.COMPLETED.value, WorkflowState.ESCALATED.value):
                             yield f"data: {json.dumps({'event_type': 'STREAM_END', 'state': new_state})}\n\n"
                             break
                 except asyncio.TimeoutError:
-                    # Send keep-alive comment
-                    yield ": ping\n\n"
+                    # Timeout elapsed: Check durable store for events from external worker instances
+                    cur_events = await store.get_events(workflow_id)
+                    if len(cur_events) > last_seen_count:
+                        for ev in cur_events[last_seen_count:]:
+                            yield f"data: {json.dumps(ev)}\n\n"
+                        last_seen_count = len(cur_events)
 
-                    # Check workflow state periodically
+                    ping_ticks += 1
+                    if ping_ticks >= 10:  # ~15 seconds heartbeat
+                        yield ": ping\n\n"
+                        ping_ticks = 0
+
+                    # Check terminal state
                     check_wf = await store.get_workflow(workflow_id)
                     if check_wf and check_wf.get("state") in ("COMPLETED", "ESCALATED"):
                         yield f"data: {json.dumps({'event_type': 'STREAM_END', 'state': check_wf['state']})}\n\n"

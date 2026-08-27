@@ -12,6 +12,7 @@ Enforces:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Callable
 
@@ -251,21 +252,50 @@ class WorkflowEventConsumer:
                     actor=message.producer_id,
                 )
 
-            # If AgentFactory is attached, execute the autonomous agent loop
+            # If AgentFactory is attached, execute the autonomous agent loop with background lease heartbeat
             if self._agent_factory:
                 logger.info(
-                    "Executing agent runner in asynchronous worker",
+                    "Executing agent runner in asynchronous worker with lease heartbeat",
                     extra={
                         "workflow_id": message.workflow_id,
                         "worker_id": self._worker_id,
                     },
                 )
-                agent_result = await run_workflow_agent(
-                    workflow_id=message.workflow_id,
-                    store=self._store,
-                    engine=self._engine,
-                    agent_factory=self._agent_factory,
-                )
+                heartbeat_stop_event = asyncio.Event()
+
+                async def _lease_heartbeat_loop():
+                    while not heartbeat_stop_event.is_set():
+                        try:
+                            await asyncio.wait_for(heartbeat_stop_event.wait(), timeout=20.0)
+                            break
+                        except asyncio.TimeoutError:
+                            renewed, _ = await self._store.renew_operation_claim(
+                                idempotency_key=message.idempotency_key,
+                                worker_id=self._worker_id,
+                                lease_seconds=60,
+                            )
+                            if not renewed:
+                                logger.error(
+                                    "Lease renewal failed; operation ownership lost",
+                                    extra={
+                                        "event_name": "EVENT_LEASE_RENEWAL_FAILED",
+                                        "idempotency_key": message.idempotency_key,
+                                        "worker_id": self._worker_id,
+                                    },
+                                )
+                                break
+
+                heartbeat_task = asyncio.create_task(_lease_heartbeat_loop())
+                try:
+                    agent_result = await run_workflow_agent(
+                        workflow_id=message.workflow_id,
+                        store=self._store,
+                        engine=self._engine,
+                        agent_factory=self._agent_factory,
+                    )
+                finally:
+                    heartbeat_stop_event.set()
+                    await asyncio.gather(heartbeat_task, return_exceptions=True)
 
         # Optional test hook after state transition
         if self._test_failure_hook:

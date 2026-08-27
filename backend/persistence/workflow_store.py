@@ -267,6 +267,17 @@ class BaseWorkflowStore(ABC):
         Attempt to transactionally acquire a lease/claim on an operation.
         Returns (acquired: bool, operation_claim_dict: dict).
         """
+    @abstractmethod
+    async def renew_operation_claim(
+        self,
+        idempotency_key: str,
+        worker_id: str,
+        lease_seconds: int = 60,
+    ) -> tuple[bool, dict[str, Any]]:
+        """
+        Renew an active operation claim lease for a worker.
+        Returns (renewed: bool, operation_claim_dict: dict).
+        """
         pass
 
     @abstractmethod
@@ -617,6 +628,45 @@ class InMemoryWorkflowStore(BaseWorkflowStore):
             ).model_dump(mode="json")
             self._operations[idempotency_key] = new_claim
             return True, copy.deepcopy(new_claim)
+
+    async def renew_operation_claim(
+        self,
+        idempotency_key: str,
+        worker_id: str,
+        lease_seconds: int = 60,
+    ) -> tuple[bool, dict[str, Any]]:
+        async with self._global_lock:
+            current = self._operations.get(idempotency_key)
+            if not current:
+                return False, {}
+
+            # Cannot renew already completed or failed operations
+            if current.get("status") in (OperationStatus.COMPLETED.value, OperationStatus.FAILED.value):
+                return False, copy.deepcopy(current)
+
+            # Must be owned by the calling worker
+            if current.get("owner_worker_id") != worker_id:
+                return False, copy.deepcopy(current)
+
+            now = datetime.now(timezone.utc)
+            # Check if lease expired and already stolen
+            exp_str = current.get("lease_expires_at")
+            if exp_str:
+                try:
+                    exp_dt = datetime.fromisoformat(exp_str)
+                    if now > exp_dt:
+                        # Expired
+                        return False, copy.deepcopy(current)
+                except ValueError:
+                    return False, copy.deepcopy(current)
+
+            # Extend lease
+            new_exp = now + timedelta(seconds=lease_seconds)
+            current["lease_expires_at"] = new_exp.isoformat()
+            current["updated_at"] = now.isoformat()
+            current["version"] = current.get("version", 1) + 1
+            self._operations[idempotency_key] = current
+            return True, copy.deepcopy(current)
 
     async def complete_operation(
         self,
@@ -1092,6 +1142,47 @@ class FirestoreWorkflowStore(BaseWorkflowStore):
 
         tx = client.transaction()
         return await _claim_tx(tx)
+
+    async def renew_operation_claim(
+        self,
+        idempotency_key: str,
+        worker_id: str,
+        lease_seconds: int = 60,
+    ) -> tuple[bool, dict[str, Any]]:
+        client = await self._get_client()
+        doc_ref = client.collection("operation_claims").document(idempotency_key)
+        from google.cloud import firestore
+
+        @firestore.async_transactional
+        async def _renew_tx(transaction):
+            doc = await doc_ref.get(transaction=transaction)
+            if not doc.exists:
+                return False, {}
+            current = doc.to_dict()
+            if current.get("status") in (OperationStatus.COMPLETED.value, OperationStatus.FAILED.value):
+                return False, current
+            if current.get("owner_worker_id") != worker_id:
+                return False, current
+
+            now = datetime.now(timezone.utc)
+            exp_str = current.get("lease_expires_at")
+            if exp_str:
+                try:
+                    exp_dt = datetime.fromisoformat(exp_str)
+                    if now > exp_dt:
+                        return False, current
+                except ValueError:
+                    return False, current
+
+            new_exp = now + timedelta(seconds=lease_seconds)
+            current["lease_expires_at"] = new_exp.isoformat()
+            current["updated_at"] = now.isoformat()
+            current["version"] = current.get("version", 1) + 1
+            transaction.set(doc_ref, current)
+            return True, current
+
+        tx = client.transaction()
+        return await _renew_tx(tx)
 
     async def complete_operation(
         self,

@@ -512,11 +512,16 @@ async function connectEventStream(workflowId) {
   const pulse = document.getElementById('stream-pulse-indicator');
   pulse.style.background = 'var(--color-cyan)';
 
-  const token = await ensureAuthToken();
-  // SSE connection with JWT via token query parameter
-  state.eventSource = new EventSource(`/api/workflows/${workflowId}/events/stream?token=${encodeURIComponent(token)}`);
+  try {
+    // Request single-use SSE ticket (eliminating JWT exposure in URLs)
+    const ticketData = await apiFetch('/api/auth/sse-ticket', {
+      method: 'POST',
+      body: JSON.stringify({ workflow_id: workflowId }),
+    });
 
-  state.eventSource.onmessage = (e) => {
+    state.eventSource = new EventSource(`/api/workflows/${workflowId}/events/stream?ticket=${encodeURIComponent(ticketData.ticket)}`);
+
+    state.eventSource.onmessage = (e) => {
     try {
       const ev = JSON.parse(e.data);
       const line = document.createElement('div');
@@ -534,10 +539,14 @@ async function connectEventStream(workflowId) {
     }
   };
 
-  state.eventSource.onerror = () => {
+    state.eventSource.onerror = () => {
+      pulse.style.background = 'var(--text-muted)';
+      if (state.eventSource) state.eventSource.close();
+    };
+  } catch (err) {
+    console.error('Failed to obtain SSE ticket or connect stream:', err);
     pulse.style.background = 'var(--text-muted)';
-    if (state.eventSource) state.eventSource.close();
-  };
+  }
 }
 
 function closeDrawer() {
