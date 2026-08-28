@@ -24,7 +24,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from backend.security.tokens import _b64url_decode
 
-STAGE_URL = "https://stage---recoveryos-aco6nasm7q-de.a.run.app"
+STAGE_URL = "https://recoveryos-stage-321161003794.asia-east1.run.app"
 PROD_URL = "https://recoveryos-321161003794.asia-east1.run.app"
 GCP_PROJECT = "recoveryos-506713"
 

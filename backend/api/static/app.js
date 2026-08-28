@@ -102,13 +102,13 @@ function formatCanonicalDateTime(isoString) {
   const d = new Date(isoString);
   if (isNaN(d.getTime())) return String(isoString);
 
-  const day = d.getDate();
+  const day = String(d.getUTCDate()).padStart(2, '0');
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const month = months[d.getMonth()];
-  const year = d.getFullYear();
-  const hours = String(d.getHours()).padStart(2, '0');
-  const minutes = String(d.getMinutes()).padStart(2, '0');
-  const seconds = String(d.getSeconds()).padStart(2, '0');
+  const month = months[d.getUTCMonth()];
+  const year = d.getUTCFullYear();
+  const hours = String(d.getUTCHours()).padStart(2, '0');
+  const minutes = String(d.getUTCMinutes()).padStart(2, '0');
+  const seconds = String(d.getUTCSeconds()).padStart(2, '0');
 
   return `${day} ${month} ${year}, ${hours}:${minutes}:${seconds}`;
 }
@@ -153,7 +153,8 @@ function normalizeWorkflowEvent(rawEvent) {
   const actor = (rawEvent.actor || 'system').toLowerCase();
   const title = rawEvent.title || rawEvent.name || evType;
   const detail = rawEvent.detail || (rawEvent.payload ? JSON.stringify(rawEvent.payload) : '');
-  const stateVal = rawEvent.state || (rawEvent.payload && rawEvent.payload.new_state);
+  const p = rawEvent.payload || {};
+  const stateVal = rawEvent.state || p.new_state || p.to_state || p.state;
 
   let stage = null;
   let actorLabel = 'SYSTEM';
@@ -486,6 +487,118 @@ function illuminateNode(stageId, actionText) {
   }
 }
 
+function markAllNodesCompleted() {
+  const stages = ['detect', 'reason', 'recover', 'verify', 'recovered'];
+  stages.forEach((st) => {
+    const node = document.getElementById(`node-${st}`);
+    const badgeEl = document.getElementById(`node-${st}-badge`);
+    if (node) {
+      node.classList.remove('active', 'escalated');
+      node.classList.add('completed');
+    }
+    if (badgeEl) badgeEl.textContent = 'VERIFIED';
+  });
+  appState.activeStage = 'recovered';
+}
+
+function hydrateWorkflowState(snapshot) {
+  if (!snapshot || !snapshot.workflow) {
+    appState.workflow = null;
+    appState.workflowStatus = 'IDLE';
+    const stageLbl = document.getElementById('graph-stage-label');
+    if (stageLbl) {
+      stageLbl.textContent = 'IDLE • AWAITING TRIGGER';
+      stageLbl.style.color = 'var(--cyan-core)';
+    }
+    resetGraph();
+    return;
+  }
+
+  const wf = snapshot.workflow;
+  const state = wf.state || 'CREATED';
+  appState.workflow = wf;
+  appState.workflowStatus = state;
+
+  const stageLbl = document.getElementById('graph-stage-label');
+
+  if (state === 'COMPLETED') {
+    if (stageLbl) {
+      stageLbl.textContent = 'RECOVERED • VERIFIED';
+      stageLbl.style.color = 'var(--emerald-core)';
+    }
+    markAllNodesCompleted();
+    updateStoryLifecycle(6);
+    hideApprovalBanner();
+    hideCinematicIncident();
+    hideToolExecution();
+    showRecoveryProof(snapshot);
+    showReplayToolbar();
+    updateStreamStatus('COMPLETED ARCHIVE', false);
+  } else if (state === 'EXECUTING') {
+    if (stageLbl) {
+      stageLbl.textContent = 'EXECUTING • AUTONOMOUS AGENT';
+      stageLbl.style.color = 'var(--cyan-core)';
+    }
+    illuminateNode('recover', 'Tool Action Executing');
+    updateStoryLifecycle(4);
+    hideApprovalBanner();
+  } else if (state === 'VERIFYING') {
+    if (stageLbl) {
+      stageLbl.textContent = 'VERIFYING • OUTCOME VALIDATION';
+      stageLbl.style.color = 'var(--cyan-core)';
+    }
+    illuminateNode('verify', 'Criteria Confirmation');
+    updateStoryLifecycle(5);
+    hideApprovalBanner();
+  } else if (state === 'RECOVERING') {
+    if (stageLbl) {
+      stageLbl.textContent = 'RECOVERING • AUTONOMOUS RETRY';
+      stageLbl.style.color = 'var(--amber-core)';
+    }
+    illuminateNode('reason', 'Recovery Plan Formulated');
+    updateStoryLifecycle(3);
+    hideApprovalBanner();
+  } else if (state === 'AWAITING_APPROVAL') {
+    if (stageLbl) {
+      stageLbl.textContent = 'AWAITING APPROVAL';
+      stageLbl.style.color = 'var(--amber-core)';
+    }
+    const nodeReason = document.getElementById('node-reason');
+    if (nodeReason) {
+      nodeReason.classList.remove('active', 'completed');
+      nodeReason.classList.add('escalated');
+    }
+    updateStoryLifecycle(3);
+    showApprovalBanner();
+  } else if (state === 'ESCALATED') {
+    if (stageLbl) {
+      stageLbl.textContent = 'ESCALATED';
+      stageLbl.style.color = 'var(--rose-core)';
+    }
+    const nodeRec = document.getElementById('node-recover');
+    if (nodeRec) {
+      nodeRec.classList.remove('active');
+      nodeRec.classList.add('escalated');
+    }
+    updateStoryLifecycle(3);
+    showReplayToolbar();
+  } else if (state === 'FAILED') {
+    if (stageLbl) {
+      stageLbl.textContent = 'FAILED • RECOVERY HALTED';
+      stageLbl.style.color = 'var(--rose-core)';
+    }
+    updateStoryLifecycle(3);
+    showReplayToolbar();
+  } else if (state === 'CREATED') {
+    if (stageLbl) {
+      stageLbl.textContent = 'IDLE • AWAITING TRIGGER';
+      stageLbl.style.color = 'var(--cyan-core)';
+    }
+    illuminateNode('detect', 'Signal Observed');
+    updateStoryLifecycle(1);
+  }
+}
+
 function handleWorkflowStateChange(newState) {
   if (!newState) return;
 
@@ -495,33 +608,11 @@ function handleWorkflowStateChange(newState) {
     return; // Reject regression from terminal state
   }
 
-  appState.workflowStatus = newState;
-
-  const stageLabel = document.getElementById('graph-stage-label');
-  if (stageLabel) stageLabel.textContent = `LIFECYCLE: ${newState}`;
-
-  if (newState === 'EXECUTING') {
-    illuminateNode('recover', 'Tool Executing');
-    updateStoryLifecycle(4);
-  } else if (newState === 'AWAITING_APPROVAL') {
-    const nodeReason = document.getElementById('node-reason');
-    if (nodeReason) {
-      nodeReason.classList.remove('active', 'completed');
-      nodeReason.classList.add('escalated');
-    }
-    updateStoryLifecycle(3);
-    showApprovalBanner();
-  } else if (newState === 'COMPLETED') {
-    illuminateNode('recovered', 'Zero-Downtime Restored');
-    updateStoryLifecycle(6);
-    hideApprovalBanner();
-  } else if (newState === 'ESCALATED') {
-    const nodeRec = document.getElementById('node-recover');
-    if (nodeRec) {
-      nodeRec.classList.remove('active');
-      nodeRec.classList.add('escalated');
-    }
+  if (appState.snapshot && appState.snapshot.workflow) {
+    appState.snapshot.workflow.state = newState;
   }
+
+  hydrateWorkflowState(appState.snapshot || { workflow: { state: newState } });
 }
 
 function updateStoryLifecycle(stepNum) {
@@ -877,6 +968,8 @@ async function selectWorkflow(workflowId) {
       renderMissingEvents(snapshot.events);
     }
 
+    hydrateWorkflowState(snapshot);
+
     const activeStates = ['EXECUTING', 'CREATED', 'VERIFYING', 'RECOVERING', 'AWAITING_APPROVAL'];
     if (activeStates.includes(snapshot.workflow?.state)) {
       showCinematicIncident(snapshot.workflow?.scenario);
@@ -973,6 +1066,7 @@ function updateFourQuestionsInspector(snapshot) {
   }
 
   const verifiedOutcomeIds = new Set();
+  const startedOutcomeIds = new Set();
   const failedOutcomeIds = new Set();
 
   evidenceList.forEach((e) => {
@@ -982,12 +1076,22 @@ function updateFourQuestionsInspector(snapshot) {
   eventsList.forEach((ev) => {
     const et = (ev.event_type || '').toUpperCase();
     const title = ev.title || '';
-    if (et === 'VERIFICATION_RESULT' && title.includes('Passed:')) {
-      const oid = title.replace('Verification Passed:', '').trim();
+    const payload = ev.payload || {};
+    const toolName = payload.tool_name || ev.tool_name;
+
+    if (et === 'VERIFICATION_RESULT' && (title.includes('Passed:') || payload.verified === true)) {
+      const oid = payload.outcome_id || title.replace('Verification Passed:', '').trim();
       if (oid) verifiedOutcomeIds.add(oid);
+    } else if (et === 'VERIFICATION_RESULT' && (title.includes('Failed:') || payload.verified === false)) {
+      const oid = payload.outcome_id || title.replace('Verification Failed:', '').trim();
+      if (oid) failedOutcomeIds.add(oid);
+    } else if ((et === 'STEP_FAILED' || et === 'VERIFICATION_FAILED') && (payload.outcome_id || ev.outcome_id)) {
+      failedOutcomeIds.add(payload.outcome_id || ev.outcome_id);
     }
-    if (et === 'STEP_FAILED' && ev.payload?.outcome_id) {
-      failedOutcomeIds.add(ev.payload.outcome_id);
+
+    if (et === 'ACTION_EXECUTION_COMPLETED' || et === 'ACTION_EXECUTION_STARTED') {
+      const oid = payload.outcome_id || TOOL_TO_OUTCOME_MAP[toolName];
+      if (oid) startedOutcomeIds.add(oid);
     }
   });
 
@@ -996,13 +1100,31 @@ function updateFourQuestionsInspector(snapshot) {
       const oid = o.outcome_id;
       const isVerified = o.verified || verifiedOutcomeIds.has(oid) || (wf.state === 'COMPLETED');
       const isFailed = failedOutcomeIds.has(oid) && !isVerified;
-      const statusClass = isVerified ? 'verified' : (isFailed ? 'failed' : 'pending');
-      const statusIcon = isVerified ? '✓' : (isFailed ? '✕' : '○');
+      const isStarted = (startedOutcomeIds.has(oid) || o.started || o.in_progress) && !isVerified && !isFailed;
+
+      let statusClass = 'pending';
+      let statusIcon = '○';
+      let statusLabel = 'PENDING';
+
+      if (isVerified) {
+        statusClass = 'verified';
+        statusIcon = '✓';
+        statusLabel = 'VERIFIED';
+      } else if (isFailed) {
+        statusClass = 'failed';
+        statusIcon = '✕';
+        statusLabel = 'FAILED';
+      } else if (isStarted) {
+        statusClass = 'in_progress';
+        statusIcon = '◐';
+        statusLabel = 'IN PROGRESS';
+      }
 
       return `
         <div class="criteria-item ${statusClass}" id="crit-${oid}">
           <span class="c-icon">${statusIcon}</span>
           <span class="c-name">${oid}</span>
+          <span class="c-label-pill ${statusClass}">${statusLabel}</span>
         </div>
       `;
     }).join('');
@@ -1053,6 +1175,7 @@ function startReplay() {
   appState.replay.timer = setInterval(() => {
     if (appState.replay.currentIndex >= appState.replay.events.length) {
       pauseReplay();
+      hydrateWorkflowState(appState.snapshot);
       return;
     }
     const ev = appState.replay.events[appState.replay.currentIndex];
@@ -1078,6 +1201,7 @@ function stepReplay() {
 
   const events = appState.snapshot.events;
   if (appState.replay.currentIndex >= events.length) {
+    hydrateWorkflowState(appState.snapshot);
     return;
   }
 
@@ -1085,6 +1209,9 @@ function stepReplay() {
   const norm = normalizeWorkflowEvent(ev);
   applyWorkflowEvent(norm);
   appState.replay.currentIndex++;
+  if (appState.replay.currentIndex >= events.length) {
+    hydrateWorkflowState(appState.snapshot);
+  }
 }
 
 function resetReplay() {

@@ -150,7 +150,11 @@ async def run_workflow_agent(
             }
 
         # Transition to EXECUTING if not already
-        if wf_data.get("state") in (WorkflowState.CREATED.value, WorkflowState.UNKNOWN.value):
+        if wf_data.get("state") in (
+            WorkflowState.CREATED.value,
+            WorkflowState.UNKNOWN.value,
+            WorkflowState.RECOVERING.value,
+        ):
             await engine.transition(
                 workflow_id,
                 WorkflowState.EXECUTING,
@@ -280,7 +284,12 @@ async def run_workflow_agent(
                     detail=f"Unverified outcomes: {unverified}",
                     actor="system",
                 )
-                return {"status": "RECOVERING", "workflow_id": workflow_id, "unverified": unverified}
+                return {
+                    "status": "RECOVERING",
+                    "workflow_id": workflow_id,
+                    "unverified": unverified,
+                    "needs_redispatch": True,
+                }
 
         return {
             "status": wf_final.get("state") if wf_final else "UNKNOWN",

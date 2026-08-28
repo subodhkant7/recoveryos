@@ -8,6 +8,7 @@ and real-time event streaming.
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 import json
 import logging
 import os
@@ -47,6 +48,7 @@ from backend.security.dependencies import get_current_principal, require_role, r
 from backend.security.audit import record_security_audit_event, set_audit_store_hook
 from backend.observability.logging import (
     current_request_id,
+    setup_logging,
     EVENT_WORKFLOW_DISPATCHED,
     EVENT_WORKFLOW_PUBLISH_FAILED,
     EVENT_WORKFLOW_RECOVERED,
@@ -58,7 +60,7 @@ from backend.observability.metrics import (
     record_workflow_recovery,
 )
 from backend.observability.middleware import CorrelationAndMetricsMiddleware
-from backend.lifecycle import lifespan, shutdown_manager
+from backend.lifecycle import shutdown_manager
 
 logger = logging.getLogger("recoveryos.api.server")
 
@@ -69,13 +71,50 @@ logger = logging.getLogger("recoveryos.api.server")
 # Validate production configuration fail-closed rules
 config.validate_production_config()
 
+
+@asynccontextmanager
+async def api_lifespan(app: FastAPI):
+    setup_logging()
+    logger.info("[LIFECYCLE] RecoveryOS API starting up...")
+    task = asyncio.create_task(recover_incomplete_workflows())
+    shutdown_manager.register_task(task)
+    yield
+    logger.info("[LIFECYCLE] RecoveryOS API beginning graceful shutdown...")
+    shutdown_manager.begin_shutdown()
+    await shutdown_manager.drain_tasks(timeout=5.0)
+    logger.info("[LIFECYCLE] RecoveryOS API shutdown complete.")
+
+
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+
+
+class CanonicalHostMiddleware(BaseHTTPMiddleware):
+    """Enforces canonical host URL in production and rejects requests to deprecated hosts."""
+
+    async def dispatch(self, request: Request, call_next):
+        if config.is_production:
+            raw_host = request.headers.get("host", "").split(":")[0].lower()
+            deprecated_hosts = {"recoveryos-aco6nasm7q-de.a.run.app", "stage---recoveryos-aco6nasm7q-de.a.run.app"}
+            if raw_host in deprecated_hosts or "aco6nasm7q" in raw_host:
+                logger.warning(f"[SECURITY] Access attempt to deprecated host '{raw_host}' rejected (404).")
+                return JSONResponse(
+                    status_code=404,
+                    content={
+                        "detail": "Host deprecated. Access canonical URL: https://recoveryos-321161003794.asia-east1.run.app/"
+                    },
+                )
+        return await call_next(request)
+
+
 app = FastAPI(
     title="RecoveryOS",
     description="Autonomous operations system — agentic failure recovery",
     version="0.1.0",
-    lifespan=lifespan,
+    lifespan=api_lifespan,
 )
 
+app.add_middleware(CanonicalHostMiddleware)
 app.add_middleware(CorrelationAndMetricsMiddleware)
 
 app.add_middleware(
@@ -1197,16 +1236,35 @@ async def recover_workflow(
 from backend.engine.agent_runner import run_workflow_agent, build_agent_prompt as _build_agent_prompt
 
 
-async def _run_agent(workflow_id: str) -> None:
+async def _run_agent(workflow_id: str, _recovery_depth: int = 0) -> None:
     """
     Run the ADK agent for a workflow via shared agent runner.
+    Autonomously re-dispatches if the workflow enters RECOVERING state and budget allows.
     """
-    await run_workflow_agent(
+    result = await run_workflow_agent(
         workflow_id=workflow_id,
         store=store,
         engine=engine,
         agent_factory=agent_factory,
     )
+    if isinstance(result, dict) and result.get("needs_redispatch") and _recovery_depth < 5:
+        wf = await store.get_workflow(workflow_id)
+        if wf:
+            attempts = wf.get("recovery_attempts", 0)
+            max_attempts = wf.get("max_recovery_attempts", 3)
+            if attempts < max_attempts and wf.get("state") not in (WorkflowState.COMPLETED.value, WorkflowState.ESCALATED.value):
+                logger.info(f"Auto-dispatching recovery agent for workflow '{workflow_id}' (attempt {attempts}/{max_attempts})")
+                await asyncio.sleep(1.0)
+                task = asyncio.create_task(_run_agent(workflow_id, _recovery_depth + 1))
+                shutdown_manager.register_task(task)
+            elif attempts >= max_attempts and wf.get("state") == WorkflowState.RECOVERING.value:
+                logger.warning(f"Recovery budget exhausted for workflow '{workflow_id}'. Escalating.")
+                await engine.transition(
+                    workflow_id,
+                    WorkflowState.ESCALATED,
+                    detail=f"Recovery budget exhausted ({attempts}/{max_attempts} attempts)",
+                    actor="system",
+                )
 
 
 def _build_agent_prompt(
@@ -1327,23 +1385,64 @@ OUTCOME CONTRACT — Required Outcomes:
 
 async def recover_incomplete_workflows():
     """Check for incomplete workflows, reconcile in-flight state, and resume them."""
-    incomplete = await store.get_incomplete_workflows()
-    for wf in incomplete:
-        wf_id = wf["workflow_id"]
-        # 1. Reconcile in-flight / interrupted state against external services
-        await engine.reconcile_interrupted_workflow(wf_id, services)
+    try:
+        incomplete = await store.get_incomplete_workflows()
+        if not incomplete:
+            return
+        logger.info(f"[STARTUP RECOVERY] Found {len(incomplete)} incomplete workflow(s) to reconcile.")
+        for wf in incomplete:
+            wf_id = wf.get("workflow_id")
+            if not wf_id:
+                continue
 
-        # 2. Check updated state
-        updated_wf = await store.get_workflow(wf_id)
-        if updated_wf and updated_wf.get("state") not in ("AWAITING_APPROVAL", "COMPLETED", "ESCALATED"):
-            updated_wf["resumed_at"] = datetime.now(timezone.utc).isoformat()
-            await store.save_workflow(updated_wf)
-            await engine._record_event(
-                workflow_id=wf_id,
-                event_type=EventType.WORKFLOW_RESUMED,
-                title="Workflow Resumed",
-                detail="Server restarted — reconciled and resumed workflow",
-                actor="system",
-            )
-            task = asyncio.create_task(_run_agent(wf_id))
-            shutdown_manager.register_task(task)
+            current_state = wf.get("state")
+            attempts = wf.get("recovery_attempts", 0)
+            max_attempts = wf.get("max_recovery_attempts", 3)
+
+            if attempts >= max_attempts and current_state == WorkflowState.RECOVERING.value:
+                logger.warning(f"[STARTUP RECOVERY] Workflow '{wf_id}' recovery budget exhausted ({attempts}/{max_attempts}). Escalating.")
+                await engine.transition(
+                    wf_id,
+                    WorkflowState.ESCALATED,
+                    detail=f"Recovery budget exhausted on startup reconciliation ({attempts}/{max_attempts} attempts)",
+                    actor="system",
+                )
+                continue
+
+            # 1. Reconcile in-flight / interrupted state against external services
+            await engine.reconcile_interrupted_workflow(wf_id, services)
+
+            # 2. Check updated state
+            updated_wf = await store.get_workflow(wf_id)
+            if updated_wf and updated_wf.get("state") not in (WorkflowState.AWAITING_APPROVAL.value, WorkflowState.COMPLETED.value, WorkflowState.ESCALATED.value):
+                updated_wf["resumed_at"] = datetime.now(timezone.utc).isoformat()
+                await store.save_workflow(updated_wf)
+                await engine._record_event(
+                    workflow_id=wf_id,
+                    event_type=EventType.WORKFLOW_RESUMED,
+                    title="Workflow Resumed",
+                    detail="Server restarted — reconciled and resumed workflow",
+                    actor="system",
+                )
+                if config.event_publisher_backend == "pubsub":
+                    publisher = get_event_publisher()
+                    workflow_ver = updated_wf.get("version", 1)
+                    idemp_key = f"op_recover_startup_{wf_id}_v{workflow_ver}"
+                    msg = WorkflowExecutionMessage(
+                        event_type=WorkflowEventType.RECOVERY_TRIGGER,
+                        workflow_id=wf_id,
+                        tenant_id=updated_wf.get("tenant_id", "tenant-default"),
+                        idempotency_key=idemp_key,
+                        expected_version=workflow_ver,
+                        correlation_id=f"corr-startup-{uuid.uuid4()}",
+                        producer_id="recoveryos-startup-reconciler",
+                        payload={"reason": "Startup reconciliation triggered recovery execution"},
+                    )
+                    await publisher.publish_workflow_execution(msg)
+                    logger.info(f"[STARTUP RECOVERY] Published Pub/Sub RECOVERY_TRIGGER for workflow '{wf_id}'")
+                else:
+                    task = asyncio.create_task(_run_agent(wf_id))
+                    shutdown_manager.register_task(task)
+                    logger.info(f"[STARTUP RECOVERY] Spawned in-memory agent task for workflow '{wf_id}'")
+    except Exception as e:
+        logger.error(f"[STARTUP RECOVERY] Error during startup recovery reconciliation: {e}")

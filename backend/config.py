@@ -103,9 +103,18 @@ class Config:
         default_factory=lambda: float(os.environ.get("GEMINI_CIRCUIT_COOLDOWN_SECONDS", "30.0"))
     )
 
+    # Canonical Production URLs
+    canonical_public_url: str = "https://recoveryos-321161003794.asia-east1.run.app"
+    canonical_worker_url: str = "https://recoveryos-worker-321161003794.asia-east1.run.app"
+    canonical_public_host: str = "recoveryos-321161003794.asia-east1.run.app"
+
     # CORS Settings
     cors_allow_origins: list[str] = field(
-        default_factory=lambda: [o.strip() for o in os.environ.get("CORS_ALLOW_ORIGINS", "*").split(",") if o.strip()]
+        default_factory=lambda: [
+            o.strip()
+            for o in os.environ.get("CORS_ALLOW_ORIGINS", "https://recoveryos-321161003794.asia-east1.run.app").split(",")
+            if o.strip() and "recoveryos-aco6nasm7q-de.a.run.app" not in o
+        ]
     )
 
     @property
