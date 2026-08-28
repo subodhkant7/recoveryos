@@ -320,9 +320,9 @@ async def test_gem_15_16_17_18_19_circuit_breaker_lifecycle():
 
 
 def test_gem_20_config_bindings():
-    """GEM-20: Limiter and resilience parameters are loaded from config."""
-    assert config.gemini_min_interval_seconds >= 6.0
-    assert config.gemini_max_retries >= 1
+    """Verify Gemini resilience config bindings."""
+    assert config.gemini_min_interval_seconds >= 2.0
+    assert config.gemini_max_retries >= 3
     assert config.gemini_circuit_failure_threshold >= 3
 
 

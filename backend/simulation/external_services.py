@@ -288,7 +288,13 @@ class SimulatedServices:
                 service_key = f"billing_{provider}"
                 if service_key in self._service_status:
                     self._service_status[service_key]["status"] = "down"
-            return failure
+                return failure
+            else:
+                record = {**failure, "customer_id": customer_id}
+                self._billing_records[customer_id] = record
+                if idempotency_key:
+                    self._operations_by_key[idempotency_key] = record
+                return {**record, "status": "success"}
 
         subscription_id = f"sub-{uuid.uuid4().hex[:8]}"
         record = {

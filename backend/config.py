@@ -21,7 +21,7 @@ class Config:
         default_factory=lambda: os.environ.get("GOOGLE_API_KEY", "")
     )
     gemini_model: str = field(
-        default_factory=lambda: os.environ.get("GEMINI_MODEL", "gemini-3.5-flash")
+        default_factory=lambda: os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
     )
 
     # Persistence
@@ -82,7 +82,7 @@ class Config:
 
     # Gemini Runtime Resilience & Rate Limiting
     gemini_min_interval_seconds: float = field(
-        default_factory=lambda: float(os.environ.get("GEMINI_MIN_INTERVAL_SECONDS", "6.5"))
+        default_factory=lambda: float(os.environ.get("GEMINI_MIN_INTERVAL_SECONDS", "3.0"))
     )
     gemini_max_retries: int = field(
         default_factory=lambda: int(os.environ.get("GEMINI_MAX_RETRIES", "3"))

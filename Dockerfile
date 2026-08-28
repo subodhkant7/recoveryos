@@ -31,6 +31,7 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Copy application source code
 COPY --chown=appuser:appgroup backend /app/backend
+COPY --chown=appuser:appgroup backend/api/static /usr/local/lib/python3.13/site-packages/backend/api/static
 COPY --chown=appuser:appgroup pyproject.toml /app/pyproject.toml
 
 ENV PYTHONUNBUFFERED=1 \

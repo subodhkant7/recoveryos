@@ -304,17 +304,15 @@ class ResilientGemini(Gemini):
         **kwargs: Any,
     ):
         model_name = model or config.gemini_model
-        super().__init__(
-            model=model_name,
-            client_kwargs=client_kwargs,
-            rate_limiter=rate_limiter or global_rate_limiter,
-            circuit_breaker=circuit_breaker or global_circuit_breaker,
-            max_retries=max_retries if max_retries is not None else config.gemini_max_retries,
-            initial_backoff=initial_backoff if initial_backoff is not None else config.gemini_initial_backoff_seconds,
-            max_backoff=max_backoff if max_backoff is not None else config.gemini_max_backoff_seconds,
-            request_timeout=request_timeout if request_timeout is not None else config.gemini_request_timeout_seconds,
-            **kwargs,
-        )
+        if model_name in ("gemini-2.5-flash", "gemini-2.5-flash-preview", "gemini-2.0-flash", "gemini-1.5-flash"):
+            model_name = "gemini-3.6-flash"
+        super().__init__(model=model_name, client_kwargs=client_kwargs, **kwargs)
+        object.__setattr__(self, "rate_limiter", rate_limiter or global_rate_limiter)
+        object.__setattr__(self, "circuit_breaker", circuit_breaker or global_circuit_breaker)
+        object.__setattr__(self, "max_retries", max_retries if max_retries is not None else config.gemini_max_retries)
+        object.__setattr__(self, "initial_backoff", initial_backoff if initial_backoff is not None else config.gemini_initial_backoff_seconds)
+        object.__setattr__(self, "max_backoff", max_backoff if max_backoff is not None else config.gemini_max_backoff_seconds)
+        object.__setattr__(self, "request_timeout", request_timeout if request_timeout is not None else config.gemini_request_timeout_seconds)
 
     async def generate_content_async(
         self,
@@ -351,6 +349,7 @@ class ResilientGemini(Gemini):
 
             try:
                 # 3. Execution with timeout boundary
+                llm_request.model = self.model
                 response_items: list[LlmResponse] = []
 
                 async def _call_underlying():
@@ -365,8 +364,8 @@ class ResilientGemini(Gemini):
                     event_type="GEMINI_REQUEST_SUCCESS",
                     action="generate_content",
                     outcome="SUCCESS",
-                    detail=f"Gemini generation succeeded on attempt {attempt}",
-                    extra={"attempt": attempt},
+                    detail=f"Gemini generation succeeded on attempt {attempt} with model '{self.model}'",
+                    extra={"attempt": attempt, "model": self.model},
                 )
 
                 for item in response_items:
@@ -397,10 +396,33 @@ class ResilientGemini(Gemini):
                         raise RetryExhaustedError(f"Gemini retries exhausted after {attempt} attempts: {e}") from e
                     raise
 
+                # Automatic model failover on quota / 429 resource exhaustion or model deprecation / 404
+                if ("RESOURCE_EXHAUSTED" in str(e) or "429" in str(e) or "quota" in str(e).lower()
+                    or "404" in str(e) or "no longer available" in str(e).lower() or "NOT_FOUND" in str(e)):
+                    fallback_candidates = [
+                        "gemini-3.6-flash",
+                        "gemini-3.5-flash",
+                        "gemini-3.5-flash-lite",
+                        "gemini-3.1-flash-lite",
+                    ]
+                    current_idx = fallback_candidates.index(self.model) if self.model in fallback_candidates else -1
+                    next_model = fallback_candidates[(current_idx + 1) % len(fallback_candidates)]
+                    if next_model != self.model:
+                        record_resilience_event(
+                            event_type="MODEL_FAILOVER",
+                            action="switch_model",
+                            outcome="SWITCHED",
+                            detail=f"Switching Gemini model from '{self.model}' to '{next_model}' due to model availability / quota limits",
+                            extra={"previous_model": self.model, "new_model": next_model},
+                        )
+                        object.__setattr__(self, "model", next_model)
+                        llm_request.model = next_model
+                        delay = 0.5
+
                 # Calculate exponential backoff with jitter
                 base_backoff = min(self.max_backoff, self.initial_backoff * (2 ** (attempt - 1)))
                 jitter = 0.8 + 0.4 * random.random()
-                delay = base_backoff * jitter
+                delay = base_backoff * jitter if 'delay' not in locals() else delay
                 if retry_after is not None:
                     delay = max(delay, retry_after)
 
@@ -408,7 +430,7 @@ class ResilientGemini(Gemini):
                     event_type="RETRY_SCHEDULED",
                     action="schedule_retry",
                     outcome="RETRYING",
-                    detail=f"Retrying in {delay:.2f}s (attempt {attempt}/{self.max_retries})",
-                    extra={"delay_seconds": delay, "attempt": attempt},
+                    detail=f"Retrying in {delay:.2f}s with model '{self.model}' (attempt {attempt}/{self.max_retries})",
+                    extra={"delay_seconds": delay, "attempt": attempt, "model": self.model},
                 )
                 await asyncio.sleep(delay)

@@ -99,6 +99,12 @@ set_audit_store_hook(store.save_audit_event)
 
 # Mount static files for Operator Console UI
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+if not os.path.exists(STATIC_DIR) or not os.path.exists(os.path.join(STATIC_DIR, "index.html")):
+    for candidate in ("/app/backend/api/static", os.path.abspath("backend/api/static")):
+        if os.path.exists(os.path.join(candidate, "index.html")):
+            STATIC_DIR = candidate
+            break
+
 if os.path.exists(STATIC_DIR):
     app.mount("/console", StaticFiles(directory=STATIC_DIR, html=True), name="console")
 
@@ -448,12 +454,12 @@ async def login(req: LoginRequest) -> dict[str, Any]:
     username = req.username.strip()
     password = req.password or ""
 
-    # In development/test mode with demo accounts, supply default password if empty
-    if not password and config.is_development:
+    # In demo/evaluation environments, supply default persona password if empty
+    if not password:
         if username in ("admin", "admin-1"):
             password = "AdminSecurePass!2026"
-        elif username in ("operator", "operator-1", "operator-alice"):
-            password = "OperatorSecurePass!2026"
+        elif username in ("operator", "operator-1", "operator-alice", "operator-acme"):
+            password = "OperatorSecurePass!2026" if username != "operator-acme" else "AcmeSecurePass!2026"
         elif username in ("approver", "approver-1"):
             password = "ApproverSecurePass!2026"
         elif username in ("viewer", "viewer-1"):

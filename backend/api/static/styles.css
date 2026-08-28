@@ -527,9 +527,18 @@ body.dark-theme {
    Column 1: Incidents & Operational Memory
    ========================================================================== */
 
+.col-incidents {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .filter-pills {
   display: flex;
   gap: 3px;
+  flex-shrink: 0;
 }
 
 .filter-pill {
@@ -564,6 +573,7 @@ body.dark-theme {
   background: var(--bg-card);
   border-bottom: 1px solid var(--border-subtle);
   color: var(--text-dim);
+  flex-shrink: 0;
 }
 
 .search-bar input {
@@ -577,12 +587,16 @@ body.dark-theme {
 }
 
 .incident-card-list {
-  flex: 1;
+  flex: 1 1 auto;
   overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  max-height: 100%;
   padding: 8px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  box-sizing: border-box;
 }
 
 .incident-card {
@@ -594,6 +608,12 @@ body.dark-theme {
   transition: all 0.2s var(--ease-spring);
   position: relative;
   overflow: hidden;
+  flex-shrink: 0;
+  min-height: 64px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }
 
 .incident-card:hover {

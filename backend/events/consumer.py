@@ -254,6 +254,19 @@ class WorkflowEventConsumer:
 
             # If AgentFactory is attached, execute the autonomous agent loop with background lease heartbeat
             if self._agent_factory:
+                # In distributed multi-process environments (Cloud Run), auto-configure scenario failure injections
+                scenario_name = wf.get("scenario")
+                if scenario_name and hasattr(self._agent_factory, "services") and hasattr(self._agent_factory.services, "failure_injector"):
+                    try:
+                        from backend.simulation.scenarios import configure_demo_scenario
+                        configure_demo_scenario(self._agent_factory.services.failure_injector, message.workflow_id, scenario_name)
+                        logger.info(
+                            f"Auto-configured scenario '{scenario_name}' on worker",
+                            extra={"workflow_id": message.workflow_id, "scenario": scenario_name},
+                        )
+                    except Exception as e:
+                        logger.warning(f"Could not auto-configure scenario {scenario_name}: {e}")
+
                 logger.info(
                     "Executing agent runner in asynchronous worker with lease heartbeat",
                     extra={

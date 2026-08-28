@@ -13,3 +13,4 @@ google-cloud-sdk
 .DS_Store
 *.swp
 *.log
+artifacts/

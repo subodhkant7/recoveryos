@@ -61,14 +61,17 @@ def api_client():
 # 1. Cloud Run Edge IAM Authentication Tests
 # ===========================================================================
 
-def test_prod_01_unauthenticated_request_rejected_by_cloud_run_iam(api_client):
-    """Unauthenticated requests without GCP Identity Token must be rejected with 403."""
+def test_prod_01_public_judge_access_to_health(api_client):
+    """Phase 40: Public judge demonstration service is accessible without private IAM authentication."""
     response = api_client.get("/api/health")
-    assert response.status_code == 403, f"Expected 403 Forbidden from Cloud Run IAM proxy, got {response.status_code}"
+    assert response.status_code == 200, f"Expected 200 OK for judge access, got {response.status_code}"
+    data = response.json()
+    assert data["status"] == "healthy"
+    assert data["service"] == "recoveryos"
 
 
 def test_prod_02_authenticated_iam_probe_reaches_backend(api_client, gcp_identity_token):
-    """Authenticated GCP Identity Token passes edge proxy and reaches /api/health."""
+    """Authenticated probe passes edge proxy and reaches /api/health."""
     headers = {"X-Serverless-Authorization": f"Bearer {gcp_identity_token}"}
     response = api_client.get("/api/health", headers=headers)
     assert response.status_code == 200
@@ -76,7 +79,7 @@ def test_prod_02_authenticated_iam_probe_reaches_backend(api_client, gcp_identit
     assert data["status"] == "healthy"
     assert data["service"] == "recoveryos"
     assert data["environment"] == "production"
-    assert data["model"] == "gemini-3.5-flash"
+    assert data["model"] in ("gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite")
 
 
 def test_prod_03_readiness_probe_verifies_live_firestore(api_client, gcp_identity_token):

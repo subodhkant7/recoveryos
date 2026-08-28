@@ -38,3 +38,7 @@ ui-debug.log
 
 # Docker
 *.log
+
+# Artifacts
+artifacts/
+google-cloud-sdk/
