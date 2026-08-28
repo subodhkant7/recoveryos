@@ -628,6 +628,12 @@ async def stream_events(
                     # Check terminal state
                     check_wf = await store.get_workflow(workflow_id)
                     if check_wf and check_wf.get("state") in ("COMPLETED", "ESCALATED"):
+                        # Re-flush durable store one final time so all terminal events are guaranteed delivered
+                        final_events = await store.get_events(workflow_id)
+                        if len(final_events) > last_seen_count:
+                            for ev in final_events[last_seen_count:]:
+                                yield f"data: {json.dumps(ev)}\n\n"
+                            last_seen_count = len(final_events)
                         yield f"data: {json.dumps({'event_type': 'STREAM_END', 'state': check_wf['state']})}\n\n"
                         break
         finally:

@@ -76,10 +76,12 @@ class SimulatedServices:
             rec = self._operations_by_key[idempotency_key]
             return {**rec, "status": "success", "reconciled": True}
 
-        # 2. Domain-specific entity inspection
+        # 2. Domain-specific entity inspection (scoped to current workflow)
+        target_wf_id = kwargs.get("workflow_id")
+
         if tool_name == "setup_billing":
             rec = self._billing_records.get(customer_id)
-            if rec:
+            if rec and (not target_wf_id or rec.get("workflow_id") == target_wf_id):
                 provider = kwargs.get("provider", "stripe")
                 plan_tier = kwargs.get("plan_tier", "enterprise")
                 billing_cycle = kwargs.get("billing_cycle", "monthly")
@@ -92,27 +94,27 @@ class SimulatedServices:
 
         elif tool_name == "verify_identity":
             rec = self._identity_records.get(customer_id)
-            if rec:
+            if rec and (not target_wf_id or rec.get("workflow_id") == target_wf_id):
                 return {**rec, "status": "success", "reconciled": True}
 
         elif tool_name == "validate_documents":
             rec = self._document_records.get(customer_id)
-            if rec:
+            if rec and (not target_wf_id or rec.get("workflow_id") == target_wf_id):
                 return {**rec, "status": "success", "reconciled": True}
 
         elif tool_name == "run_risk_check":
             rec = self._risk_records.get(customer_id)
-            if rec:
+            if rec and (not target_wf_id or rec.get("workflow_id") == target_wf_id):
                 return {**rec, "status": "success", "reconciled": True}
 
         elif tool_name == "activate_account":
             rec = self._account_records.get(customer_id)
-            if rec:
+            if rec and (not target_wf_id or rec.get("workflow_id") == target_wf_id):
                 return {**rec, "status": "success", "reconciled": True}
 
         elif tool_name == "send_welcome_package":
             rec = self._notification_records.get(customer_id)
-            if rec:
+            if rec and (not target_wf_id or rec.get("workflow_id") == target_wf_id):
                 return {**rec, "status": "success", "reconciled": True}
 
         return None
@@ -126,18 +128,33 @@ class SimulatedServices:
         full_name: str = "", idempotency_key: str = "", **kwargs: Any,
     ) -> dict[str, Any]:
         """Simulate a government ID verification API."""
-        if idempotency_key and idempotency_key in self._operations_by_key:
-            return {**self._operations_by_key[idempotency_key], "status": "success"}
-
-        existing = self._identity_records.get(customer_id)
-        if existing:
-            return {**existing, "status": "success"}
-
         failure = await self._injector.check_failure(
             workflow_id, "verify_identity"
         )
         if failure:
             return failure
+
+        if idempotency_key and idempotency_key in self._operations_by_key:
+            return {**self._operations_by_key[idempotency_key], "status": "success"}
+
+        existing = self._identity_records.get(customer_id)
+        if existing and existing.get("workflow_id") == workflow_id:
+            return {**existing, "status": "success"}
+
+        ref_id = f"idv-{uuid.uuid4().hex[:8]}"
+        record = {
+            "verification_reference_id": ref_id,
+            "workflow_id": workflow_id,
+            "customer_id": customer_id,
+            "id_type": id_type,
+            "full_name": full_name,
+            "verification_status": "verified",
+            "verified_at": datetime.now(timezone.utc).isoformat(),
+        }
+        self._identity_records[customer_id] = record
+        if idempotency_key:
+            self._operations_by_key[idempotency_key] = record
+        return {**record, "status": "success"}
 
         ref_id = f"idv-{uuid.uuid4().hex[:8]}"
         record = {
@@ -171,22 +188,23 @@ class SimulatedServices:
         document_types: list[str] | None = None, idempotency_key: str = "", **kwargs: Any,
     ) -> dict[str, Any]:
         """Simulate a document OCR/validation service."""
-        if idempotency_key and idempotency_key in self._operations_by_key:
-            return {**self._operations_by_key[idempotency_key], "status": "success"}
-
-        existing = self._document_records.get(customer_id)
-        if existing:
-            return {**existing, "status": "success"}
-
         failure = await self._injector.check_failure(
             workflow_id, "validate_documents"
         )
         if failure:
             return failure
 
+        if idempotency_key and idempotency_key in self._operations_by_key:
+            return {**self._operations_by_key[idempotency_key], "status": "success"}
+
+        existing = self._document_records.get(customer_id)
+        if existing and existing.get("workflow_id") == workflow_id:
+            return {**existing, "status": "success"}
+
         sub_id = f"doc-{uuid.uuid4().hex[:8]}"
         record = {
             "validation_reference_id": sub_id,
+            "workflow_id": workflow_id,
             "customer_id": customer_id,
             "document_types": document_types or ["incorporation", "tax_id"],
             "validation_status": "validated",
@@ -214,22 +232,23 @@ class SimulatedServices:
         self, workflow_id: str, customer_id: str, idempotency_key: str = "", **kwargs: Any,
     ) -> dict[str, Any]:
         """Simulate a credit/risk scoring engine."""
-        if idempotency_key and idempotency_key in self._operations_by_key:
-            return {**self._operations_by_key[idempotency_key], "status": "success"}
-
-        existing = self._risk_records.get(customer_id)
-        if existing:
-            return {**existing, "status": "success"}
-
         failure = await self._injector.check_failure(
             workflow_id, "run_risk_check"
         )
         if failure:
             return failure
 
+        if idempotency_key and idempotency_key in self._operations_by_key:
+            return {**self._operations_by_key[idempotency_key], "status": "success"}
+
+        existing = self._risk_records.get(customer_id)
+        if existing and existing.get("workflow_id") == workflow_id:
+            return {**existing, "status": "success"}
+
         assessment_id = f"risk-{uuid.uuid4().hex[:8]}"
         record = {
             "assessment_id": assessment_id,
+            "workflow_id": workflow_id,
             "customer_id": customer_id,
             "risk_score": 32,  # Low risk
             "risk_level": "low",
@@ -265,17 +284,10 @@ class SimulatedServices:
         """
         Simulate billing API.
 
-        Guarantees that a repeat operation returns the existing subscription
-        instead of creating a duplicate subscription.
+        Guarantees that failure injector is always evaluated first before
+        returning existing state or cached mutations.
         """
-        if idempotency_key and idempotency_key in self._operations_by_key:
-            return {**self._operations_by_key[idempotency_key], "status": "success"}
-
-        service_key = f"billing_{provider}"
-        if service_key not in self._service_status:
-            return {"status": "error", "error_type": "UNKNOWN_PROVIDER", "message": f"Billing provider '{provider}' is not supported"}
-
-        # Check failure injector FIRST before any cached state
+        # 1. Check failure injector FIRST
         failure = await self._injector.check_failure(
             workflow_id, "setup_billing", context={"provider": provider}
         )
@@ -286,15 +298,23 @@ class SimulatedServices:
                     self._service_status[service_key]["status"] = "down"
                 return failure
             else:
-                record = {**failure, "customer_id": customer_id}
+                record = {**failure, "workflow_id": workflow_id, "customer_id": customer_id}
                 self._billing_records[customer_id] = record
                 if idempotency_key:
                     self._operations_by_key[idempotency_key] = record
                 return {**record, "status": "success"}
 
+        if idempotency_key and idempotency_key in self._operations_by_key:
+            return {**self._operations_by_key[idempotency_key], "status": "success"}
+
+        service_key = f"billing_{provider}"
+        if service_key not in self._service_status:
+            return {"status": "error", "error_type": "UNKNOWN_PROVIDER", "message": f"Billing provider '{provider}' is not supported"}
+
         existing = self._billing_records.get(customer_id)
         if (
             existing
+            and existing.get("workflow_id") == workflow_id
             and existing.get("provider") == provider
             and existing.get("plan_tier") == plan_tier
             and existing.get("billing_cycle") == billing_cycle
@@ -304,6 +324,7 @@ class SimulatedServices:
         subscription_id = f"sub-{uuid.uuid4().hex[:8]}"
         record = {
             "subscription_id": subscription_id,
+            "workflow_id": workflow_id,
             "customer_id": customer_id,
             "provider": provider,
             "plan_tier": plan_tier,
@@ -333,22 +354,23 @@ class SimulatedServices:
         self, workflow_id: str, customer_id: str, idempotency_key: str = "", **kwargs: Any,
     ) -> dict[str, Any]:
         """Simulate internal account activation."""
-        if idempotency_key and idempotency_key in self._operations_by_key:
-            return {**self._operations_by_key[idempotency_key], "status": "success"}
-
-        existing = self._account_records.get(customer_id)
-        if existing and existing.get("account_status") == "active":
-            return {**existing, "status": "success", "already_active": True}
-
         failure = await self._injector.check_failure(
             workflow_id, "activate_account"
         )
         if failure:
             return failure
 
+        if idempotency_key and idempotency_key in self._operations_by_key:
+            return {**self._operations_by_key[idempotency_key], "status": "success"}
+
+        existing = self._account_records.get(customer_id)
+        if existing and existing.get("workflow_id") == workflow_id and existing.get("account_status") == "active":
+            return {**existing, "status": "success", "already_active": True}
+
         account_id = f"acct-{uuid.uuid4().hex[:8]}"
         record = {
             "account_id": account_id,
+            "workflow_id": workflow_id,
             "customer_id": customer_id,
             "account_status": "active",
             "activation_timestamp": datetime.now(timezone.utc).isoformat(),
@@ -376,22 +398,23 @@ class SimulatedServices:
         email: str = "", idempotency_key: str = "", **kwargs: Any,
     ) -> dict[str, Any]:
         """Simulate sending a welcome email/notification."""
-        if idempotency_key and idempotency_key in self._operations_by_key:
-            return {**self._operations_by_key[idempotency_key], "status": "success"}
-
-        existing = self._notification_records.get(customer_id)
-        if existing and existing.get("delivery_status") == "delivered":
-            return {**existing, "status": "success"}
-
         failure = await self._injector.check_failure(
             workflow_id, "send_welcome_package"
         )
         if failure:
             return failure
 
+        if idempotency_key and idempotency_key in self._operations_by_key:
+            return {**self._operations_by_key[idempotency_key], "status": "success"}
+
+        existing = self._notification_records.get(customer_id)
+        if existing and existing.get("workflow_id") == workflow_id and existing.get("delivery_status") == "delivered":
+            return {**existing, "status": "success"}
+
         message_id = f"msg-{uuid.uuid4().hex[:8]}"
         record = {
             "message_id": message_id,
+            "workflow_id": workflow_id,
             "customer_id": customer_id,
             "email": email,
             "delivery_status": "delivered",
@@ -401,6 +424,7 @@ class SimulatedServices:
         if idempotency_key:
             self._operations_by_key[idempotency_key] = record
         return {**record, "status": "success"}
+
 
     async def query_notification_status(
         self, message_id: str,

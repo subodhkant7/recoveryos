@@ -131,6 +131,17 @@ async def run_workflow_agent(
                 actor="taskmaster",
             )
 
+        # In multi-process and containerized environments, auto-configure scenario failure injection
+        scenario_name = wf_data.get("scenario")
+        services = getattr(agent_factory, "services", getattr(agent_factory, "_services", None))
+        injector = getattr(services, "failure_injector", getattr(services, "_injector", None)) if services else None
+        if scenario_name and injector:
+            try:
+                from backend.simulation.scenarios import configure_demo_scenario
+                configure_demo_scenario(injector, workflow_id, scenario_name)
+            except Exception as e:
+                logger.warning(f"Could not configure scenario '{scenario_name}' on runner: {e}")
+
         # In-flight cancellation check
         cur_wf = await store.get_workflow(workflow_id)
         if cur_wf and cur_wf.get("state") in (
@@ -213,6 +224,8 @@ async def run_workflow_agent(
                 actor="system",
             )
 
+            # Re-fetch authoritative workflow to inspect latest verified contract
+            wf_final = await store.get_workflow(workflow_id) or wf_final
             contract = wf_final.get("contract", {})
             all_verified = all(
                 o.get("verified", False)
