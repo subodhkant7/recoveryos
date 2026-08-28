@@ -55,11 +55,11 @@ async def test_02_historical_hydration_all_lifecycle_states():
     states_to_test = [
         (WorkflowState.COMPLETED, "RECOVERED • VERIFIED"),
         (WorkflowState.RECOVERING, "RECOVERING • AUTONOMOUS RETRY"),
-        (WorkflowState.EXECUTING, "EXECUTING • AUTONOMOUS AGENT"),
-        (WorkflowState.VERIFYING, "VERIFYING • OUTCOME VALIDATION"),
+        (WorkflowState.EXECUTING, "EXECUTING • AGENT ACTIVE"),
+        (WorkflowState.VERIFYING, "VERIFYING • OUTCOME CHECK"),
         (WorkflowState.AWAITING_APPROVAL, "AWAITING APPROVAL"),
-        (WorkflowState.ESCALATED, "ESCALATED"),
-        (WorkflowState.CREATED, "IDLE • AWAITING TRIGGER"),
+        (WorkflowState.ESCALATED, "ESCALATED • HUMAN INTERVENTION"),
+        (WorkflowState.CREATED, "CREATED • READY"),
     ]
 
     for state_enum, expected_label in states_to_test:
@@ -124,12 +124,12 @@ async def test_03_authoritative_required_outcomes_calculation():
 
 
 def test_04_timestamp_canonical_format():
-    """Verify UTC canonical timestamp formatting (DD Mon YYYY, HH:MM:SS)."""
+    """Verify UTC canonical timestamp formatting (DD Mon YYYY, HH:MM:SS UTC)."""
     # ISO string: 2026-08-28T23:18:39.123456Z
     iso_ts = "2026-08-28T23:18:39.123456Z"
     dt = datetime.fromisoformat(iso_ts.replace("Z", "+00:00"))
 
     months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-    formatted = f"{dt.day:02d} {months[dt.month-1]} {dt.year}, {dt.hour:02d}:{dt.minute:02d}:{dt.second:02d}"
+    formatted = f"{dt.day:02d} {months[dt.month-1]} {dt.year}, {dt.hour:02d}:{dt.minute:02d}:{dt.second:02d} UTC"
 
-    assert formatted == "28 Aug 2026, 23:18:39"
+    assert formatted == "28 Aug 2026, 23:18:39 UTC"

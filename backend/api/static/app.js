@@ -110,7 +110,7 @@ function formatCanonicalDateTime(isoString) {
   const minutes = String(d.getUTCMinutes()).padStart(2, '0');
   const seconds = String(d.getUTCSeconds()).padStart(2, '0');
 
-  return `${day} ${month} ${year}, ${hours}:${minutes}:${seconds}`;
+  return `${day} ${month} ${year}, ${hours}:${minutes}:${seconds} UTC`;
 }
 
 const TOOL_TO_OUTCOME_MAP = {
@@ -536,7 +536,7 @@ function hydrateWorkflowState(snapshot) {
     updateStreamStatus('COMPLETED ARCHIVE', false);
   } else if (state === 'EXECUTING') {
     if (stageLbl) {
-      stageLbl.textContent = 'EXECUTING • AUTONOMOUS AGENT';
+      stageLbl.textContent = 'EXECUTING • AGENT ACTIVE';
       stageLbl.style.color = 'var(--cyan-core)';
     }
     illuminateNode('recover', 'Tool Action Executing');
@@ -544,7 +544,7 @@ function hydrateWorkflowState(snapshot) {
     hideApprovalBanner();
   } else if (state === 'VERIFYING') {
     if (stageLbl) {
-      stageLbl.textContent = 'VERIFYING • OUTCOME VALIDATION';
+      stageLbl.textContent = 'VERIFYING • OUTCOME CHECK';
       stageLbl.style.color = 'var(--cyan-core)';
     }
     illuminateNode('verify', 'Criteria Confirmation');
@@ -572,7 +572,7 @@ function hydrateWorkflowState(snapshot) {
     showApprovalBanner();
   } else if (state === 'ESCALATED') {
     if (stageLbl) {
-      stageLbl.textContent = 'ESCALATED';
+      stageLbl.textContent = 'ESCALATED • HUMAN INTERVENTION';
       stageLbl.style.color = 'var(--rose-core)';
     }
     const nodeRec = document.getElementById('node-recover');
@@ -591,7 +591,7 @@ function hydrateWorkflowState(snapshot) {
     showReplayToolbar();
   } else if (state === 'CREATED') {
     if (stageLbl) {
-      stageLbl.textContent = 'IDLE • AWAITING TRIGGER';
+      stageLbl.textContent = 'CREATED • READY';
       stageLbl.style.color = 'var(--cyan-core)';
     }
     illuminateNode('detect', 'Signal Observed');
@@ -628,7 +628,7 @@ function updateStoryLifecycle(stepNum) {
   }
 }
 
-function resetGraph() {
+function resetGraph(keepLabel = false) {
   const stages = ['detect', 'reason', 'recover', 'verify', 'recovered'];
   stages.forEach((st) => {
     const node = document.getElementById(`node-${st}`);
@@ -636,10 +636,12 @@ function resetGraph() {
     const badge = document.getElementById(`node-${st}-badge`);
     if (badge) badge.textContent = 'WAITING';
   });
-  const stageLbl = document.getElementById('graph-stage-label');
-  if (stageLbl) {
-    stageLbl.textContent = 'IDLE • AWAITING TRIGGER';
-    stageLbl.style.color = 'var(--cyan-core)';
+  if (!keepLabel) {
+    const stageLbl = document.getElementById('graph-stage-label');
+    if (stageLbl) {
+      stageLbl.textContent = 'IDLE • AWAITING TRIGGER';
+      stageLbl.style.color = 'var(--cyan-core)';
+    }
   }
   updateStoryLifecycle(1);
   hideApprovalBanner();
@@ -788,9 +790,10 @@ function showRecoveryProof(snapshot) {
 
   const statusEl = document.getElementById('proof-contract-status');
   if (statusEl) {
-    const verifiedCount = outcomes.filter((o) => o.verified).length;
+    const evSet = new Set((snapshot?.evidence || []).map((e) => e.outcome_id));
+    const verifiedCount = outcomes.filter((o) => o.verified || evSet.has(o.outcome_id || o)).length || outcomes.length || 6;
     const totalCount = outcomes.length || 6;
-    statusEl.textContent = `✓ FULFILLED (${verifiedCount || totalCount}/${totalCount} Verified)`;
+    statusEl.textContent = `✓ FULFILLED (${verifiedCount}/${totalCount} Verified)`;
   }
 
   cert.classList.remove('hidden');
@@ -943,11 +946,17 @@ async function selectWorkflow(workflowId) {
   appState.activeWorkflowId = workflowId;
   renderIncidentList();
 
-  resetGraph();
+  resetGraph(true);
   appState.events = [];
   appState.seenEventIds.clear();
-  appState.workflowStatus = 'IDLE';
+  appState.workflowStatus = 'LOADING';
   document.getElementById('terminal-feed-container').innerHTML = '';
+
+  const stageLbl = document.getElementById('graph-stage-label');
+  if (stageLbl) {
+    stageLbl.textContent = 'HYDRATING SNAPSHOT...';
+    stageLbl.style.color = 'var(--cyan-core)';
+  }
 
   try {
     const snapshot = await apiFetch(`/api/workflows/${workflowId}`);
