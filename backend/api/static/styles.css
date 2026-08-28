@@ -1712,6 +1712,17 @@ body.dark-theme {
   border-left: 2px solid var(--emerald-core);
 }
 
+.criteria-item.in_progress,
+.criteria-item.in-progress {
+  color: #f59e0b;
+  border-left: 2px solid #f59e0b;
+}
+
+.criteria-item.failed {
+  color: #ef4444;
+  border-left: 2px solid #ef4444;
+}
+
 .criteria-item.pending {
   color: var(--text-dim);
 }

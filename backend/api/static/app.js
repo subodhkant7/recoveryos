@@ -97,6 +97,48 @@ async function apiFetch(url, options = {}) {
 // 2. Authoritative Helpers (MTTR, Normalization, Sanitization)
 // ==========================================================================
 
+function formatCanonicalDateTime(isoString) {
+  if (!isoString) return '';
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return String(isoString);
+
+  const day = d.getDate();
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const month = months[d.getMonth()];
+  const year = d.getFullYear();
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const seconds = String(d.getSeconds()).padStart(2, '0');
+
+  return `${day} ${month} ${year}, ${hours}:${minutes}:${seconds}`;
+}
+
+const TOOL_TO_OUTCOME_MAP = {
+  verify_identity: 'identity_verified',
+  validate_documents: 'documents_validated',
+  run_risk_check: 'risk_assessed',
+  setup_billing: 'billing_configured',
+  activate_account: 'account_activated',
+  send_welcome_package: 'welcome_sent',
+};
+
+function setOutcomeStatus(outcomeId, status) {
+  if (!outcomeId) return;
+  const cleanId = outcomeId.replace('Verification Passed:', '').replace('Verify Outcome:', '').replace('Verification Failed:', '').trim();
+  const el = document.getElementById(`crit-${cleanId}`);
+  if (el) {
+    el.classList.remove('pending', 'in_progress', 'in-progress', 'verified', 'failed');
+    el.classList.add(status);
+    const icon = el.querySelector('.c-icon');
+    if (icon) {
+      if (status === 'verified') icon.textContent = '✓';
+      else if (status === 'failed') icon.textContent = '✕';
+      else if (status === 'in_progress') icon.textContent = '◐';
+      else icon.textContent = '○';
+    }
+  }
+}
+
 function calculateWorkflowDuration(createdAt, completedAt) {
   if (!createdAt) return '0.0s';
   const start = new Date(createdAt).getTime();
@@ -161,7 +203,7 @@ function getEventDeduplicationKey(rawEvent) {
   if (rawEvent.event_id) return rawEvent.event_id;
   if (rawEvent.id) return rawEvent.id;
   const et = rawEvent.event_type || '';
-  const ts = rawEvent.timestamp || '';
+  const ts = rawEvent.occurred_at || rawEvent.timestamp || '';
   const title = rawEvent.title || '';
   const detail = rawEvent.detail || '';
   return `${et}:${ts}:${title}:${detail}`;
@@ -244,18 +286,22 @@ function applyWorkflowEvent(normalizedEvent) {
   appState.events.push(normalizedEvent.raw);
   updateEventCount();
 
+  const rawTimestamp = normalizedEvent.raw.occurred_at || normalizedEvent.raw.timestamp || normalizedEvent.raw.created_at;
+
   // Log to terminal (format STREAM_END cleanly)
   if (normalizedEvent.eventType === 'STREAM_END') {
     appendTerminalLine(
       'SYSTEM',
       `Stream finalized (state: ${normalizedEvent.state || 'COMPLETED'})`,
-      'actor-system'
+      'actor-system',
+      rawTimestamp
     );
   } else {
     appendTerminalLine(
       normalizedEvent.actorLabel,
       `${normalizedEvent.title}: ${normalizedEvent.detail}`,
-      normalizedEvent.actorClass
+      normalizedEvent.actorClass,
+      rawTimestamp
     );
   }
 
@@ -271,8 +317,8 @@ function applyWorkflowEvent(normalizedEvent) {
     updateStoryLifecycle(4);
 
     const p = normalizedEvent.payload;
-    const toolName = p.tool_name || normalizedEvent.raw.tool_name || 'switch_payment_gateway';
-    const toolArgs = p.tool_args || p.args || { provider: 'adyen', reason: 'primary_provider_outage' };
+    const toolName = p.tool_name || normalizedEvent.raw.tool_name || 'setup_billing';
+    const toolArgs = p.tool_args || p.args || { provider: 'paypal', reason: 'primary_provider_outage' };
     const idempKey = p.idempotency_key || `op_dispatch_${appState.activeWorkflowId?.slice(0, 4)}`;
     showToolExecution(toolName, toolArgs, idempKey);
   } else if (normalizedEvent.stage === 'verify') {
@@ -280,13 +326,27 @@ function applyWorkflowEvent(normalizedEvent) {
     updateStoryLifecycle(5);
   }
 
+  // Dynamic Outcome Panel State Tracking
+  const p = normalizedEvent.payload || {};
+  const toolName = p.tool_name || normalizedEvent.raw.tool_name;
+  if (normalizedEvent.eventType === 'STEP_STARTED' && toolName && TOOL_TO_OUTCOME_MAP[toolName]) {
+    setOutcomeStatus(TOOL_TO_OUTCOME_MAP[toolName], 'in_progress');
+  } else if (normalizedEvent.eventType === 'STEP_FAILED' && toolName && TOOL_TO_OUTCOME_MAP[toolName]) {
+    setOutcomeStatus(TOOL_TO_OUTCOME_MAP[toolName], 'failed');
+  } else if (normalizedEvent.eventType === 'VERIFICATION_RESULT') {
+    const outcomeId = p.outcome_id || normalizedEvent.title.replace('Verification Passed:', '').replace('Verify Outcome:', '').trim();
+    if (normalizedEvent.title.includes('Passed') || p.passed !== false || !p.discrepancies?.length) {
+      setOutcomeStatus(outcomeId, 'verified');
+    } else {
+      setOutcomeStatus(outcomeId, 'failed');
+    }
+  } else if (normalizedEvent.eventType === 'OUTCOME_VERIFIED' || normalizedEvent.title.includes('Verified')) {
+    setOutcomeStatus(p.outcome_id || normalizedEvent.title, 'verified');
+  }
+
   // Handle state transitions defensively
   if (normalizedEvent.state) {
     handleWorkflowStateChange(normalizedEvent.state);
-  }
-
-  if (normalizedEvent.eventType === 'OUTCOME_VERIFIED' || normalizedEvent.title.includes('Verified')) {
-    markCriteriaVerified(normalizedEvent.payload.outcome_id || normalizedEvent.title);
   }
 
   if (normalizedEvent.state === 'COMPLETED' || normalizedEvent.eventType === 'STREAM_END') {
@@ -675,14 +735,14 @@ function hideRecoveryProof() {
 // 7. Terminal Feed
 // ==========================================================================
 
-function appendTerminalLine(actor, msg, actorClass = 'actor-system') {
+function appendTerminalLine(actor, msg, actorClass = 'actor-system', rawTimestamp = null) {
   const container = document.getElementById('terminal-feed-container');
   if (!container) return;
 
   const line = document.createElement('div');
   line.className = 'terminal-line';
 
-  const ts = new Date().toTimeString().split(' ')[0];
+  const ts = formatCanonicalDateTime(rawTimestamp || new Date().toISOString());
 
   line.innerHTML = `
     <span class="terminal-ts">[${ts}]</span>
@@ -764,7 +824,7 @@ function renderIncidentList() {
     const isSelected = wf.workflow_id === appState.activeWorkflowId;
     const stateClass = `state-${(wf.state || 'unknown').toLowerCase()}`;
     const scen = wf.scenario || 'custom';
-    const timeStr = wf.created_at ? new Date(wf.created_at).toLocaleTimeString() : 'Just now';
+    const timeStr = wf.created_at ? formatCanonicalDateTime(wf.created_at) : 'Just now';
 
     return `
       <div class="incident-card ${isSelected ? 'selected' : ''}" data-id="${wf.workflow_id}">
@@ -794,8 +854,8 @@ async function selectWorkflow(workflowId) {
 
   resetGraph();
   appState.events = [];
-  appState.seenEventIds.clear();  // Phase 31: Reset dedup on workflow switch
-  appState.workflowStatus = 'IDLE';  // Phase 31: Reset terminal guard
+  appState.seenEventIds.clear();
+  appState.workflowStatus = 'IDLE';
   document.getElementById('terminal-feed-container').innerHTML = '';
 
   try {
@@ -823,7 +883,6 @@ async function selectWorkflow(workflowId) {
       connectWorkflowStream(workflowId);
     } else {
       updateStreamStatus('COMPLETED ARCHIVE', false);
-      // Phase 31 Finding 2: Only show proof for COMPLETED workflows
       if (snapshot.workflow?.state === 'COMPLETED') {
         showRecoveryProof(snapshot);
       }
@@ -849,7 +908,6 @@ function updateAutonomyDecisionCard(scenario, wfState) {
       badge.className = 'decision-badge pass';
     }
   } else if (scenario === 'contradictory_evidence') {
-    // Phase 31 Finding 5: Autonomy badge responds to all workflow states
     if (wfState === 'COMPLETED') {
       if (statement) statement.textContent = '✓ OPERATOR AUTHORIZED RECOVERY • Human approval granted • Recovery executed and verified';
       if (badge) { badge.textContent = 'OPERATOR AUTHORIZED'; badge.className = 'decision-badge pass'; }
@@ -872,6 +930,8 @@ function updateAutonomyDecisionCard(scenario, wfState) {
 function updateFourQuestionsInspector(snapshot) {
   const wf = snapshot.workflow || {};
   const contract = snapshot.contract || {};
+  const evidenceList = snapshot.evidence || [];
+  const eventsList = snapshot.events || [];
 
   const narrative = document.querySelector('.narrative-quote');
   const seeBox = document.getElementById('audit-see-body');
@@ -879,10 +939,10 @@ function updateFourQuestionsInspector(snapshot) {
   const doBox = document.getElementById('audit-do-body');
 
   if (wf.scenario === 'billing_unavailable') {
-    if (narrative) narrative.textContent = `"I detected repeated Stripe failures, confirmed the failure pattern against policy thresholds, switched to the configured secondary provider (Adyen), and verified recovery with a successful transaction probe."`;
-    if (seeBox) seeBox.textContent = 'Stripe endpoint /v1/charges returned consecutive HTTP 500 timeouts across verification window.';
-    if (thinkBox) thinkBox.textContent = 'Primary provider is degraded. Secondary provider (Adyen) is healthy. Automated failover permitted by policy (0 violations).';
-    if (doBox) doBox.innerHTML = '<code>switch_payment_gateway(provider="adyen")</code>';
+    if (narrative) narrative.textContent = `"I detected repeated Stripe failures, confirmed the failure pattern against policy thresholds, switched to the configured secondary provider (PayPal), and verified recovery with a successful subscription probe."`;
+    if (seeBox) seeBox.textContent = 'Stripe endpoint /v1/charges returned HTTP 503 Service Unavailable during billing configuration.';
+    if (thinkBox) thinkBox.textContent = 'Primary provider Stripe is unavailable. Secondary provider (PayPal) is healthy. Automated failover permitted by policy.';
+    if (doBox) doBox.innerHTML = '<code>setup_billing(provider="paypal")</code>';
   } else if (wf.scenario === 'contradictory_evidence') {
     if (narrative) narrative.textContent = `"I detected conflicting risk records between credit bureaus. Because autonomous execution would risk compliance violation, I safely escalated to human approval."`;
     if (seeBox) seeBox.textContent = 'Conflicting identity verification data returned from multi-provider checks (Experian: 42 vs Equifax: 88).';
@@ -897,30 +957,60 @@ function updateFourQuestionsInspector(snapshot) {
 
   // Criteria Checklist
   const criteriaBox = document.getElementById('inspect-criteria-checklist');
-  const requiredOutcomes = contract.required_outcomes || [
-    { outcome_id: 'identity_verified', verified: true },
-    { outcome_id: 'billing_configured', verified: wf.state === 'COMPLETED' },
-    { outcome_id: 'account_activated', verified: wf.state === 'COMPLETED' },
-  ];
+
+  let requiredOutcomes = [];
+  if (Array.isArray(contract.required_outcomes) && contract.required_outcomes.length > 0) {
+    requiredOutcomes = contract.required_outcomes.map((o) => (typeof o === 'string' ? { outcome_id: o } : o));
+  } else {
+    requiredOutcomes = [
+      { outcome_id: 'identity_verified' },
+      { outcome_id: 'documents_validated' },
+      { outcome_id: 'risk_assessed' },
+      { outcome_id: 'billing_configured' },
+      { outcome_id: 'account_activated' },
+      { outcome_id: 'welcome_sent' },
+    ];
+  }
+
+  const verifiedOutcomeIds = new Set();
+  const failedOutcomeIds = new Set();
+
+  evidenceList.forEach((e) => {
+    if (e.outcome_id) verifiedOutcomeIds.add(e.outcome_id);
+  });
+
+  eventsList.forEach((ev) => {
+    const et = (ev.event_type || '').toUpperCase();
+    const title = ev.title || '';
+    if (et === 'VERIFICATION_RESULT' && title.includes('Passed:')) {
+      const oid = title.replace('Verification Passed:', '').trim();
+      if (oid) verifiedOutcomeIds.add(oid);
+    }
+    if (et === 'STEP_FAILED' && ev.payload?.outcome_id) {
+      failedOutcomeIds.add(ev.payload.outcome_id);
+    }
+  });
 
   if (criteriaBox) {
-    criteriaBox.innerHTML = requiredOutcomes.map((o) => `
-      <div class="criteria-item ${o.verified ? 'verified' : 'pending'}" id="crit-${o.outcome_id}">
-        <span class="c-icon">${o.verified ? '✓' : '○'}</span>
-        <span class="c-name">${o.outcome_id}</span>
-      </div>
-    `).join('');
+    criteriaBox.innerHTML = requiredOutcomes.map((o) => {
+      const oid = o.outcome_id;
+      const isVerified = o.verified || verifiedOutcomeIds.has(oid) || (wf.state === 'COMPLETED');
+      const isFailed = failedOutcomeIds.has(oid) && !isVerified;
+      const statusClass = isVerified ? 'verified' : (isFailed ? 'failed' : 'pending');
+      const statusIcon = isVerified ? '✓' : (isFailed ? '✕' : '○');
+
+      return `
+        <div class="criteria-item ${statusClass}" id="crit-${oid}">
+          <span class="c-icon">${statusIcon}</span>
+          <span class="c-name">${oid}</span>
+        </div>
+      `;
+    }).join('');
   }
 }
 
 function markCriteriaVerified(outcomeId) {
-  const el = document.getElementById(`crit-${outcomeId}`);
-  if (el) {
-    el.classList.remove('pending');
-    el.classList.add('verified');
-    const icon = el.querySelector('.c-icon');
-    if (icon) icon.textContent = '✓';
-  }
+  setOutcomeStatus(outcomeId, 'verified');
 }
 
 // ==========================================================================
@@ -938,17 +1028,27 @@ function hideReplayToolbar() {
 function startReplay() {
   if (!appState.snapshot?.events?.length) return;
 
+  const events = appState.snapshot.events;
+
+  if (appState.replay.currentIndex >= events.length) {
+    appState.replay.currentIndex = 0;
+    resetGraph();
+    document.getElementById('terminal-feed-container').innerHTML = '';
+    appState.events = [];
+    appState.seenEventIds.clear();
+    updateFourQuestionsInspector(appState.snapshot);
+  }
+
   appState.replay.active = true;
-  appState.replay.events = [...appState.snapshot.events];
-  appState.replay.currentIndex = 0;
+  appState.replay.events = events;
 
   updateStreamStatus('↺ DECISION REPLAY • READ-ONLY', true);
-  resetGraph();
-  document.getElementById('terminal-feed-container').innerHTML = '';
-  appState.events = [];
-
   document.getElementById('btn-replay-play')?.classList.add('hidden');
   document.getElementById('btn-replay-pause')?.classList.remove('hidden');
+
+  if (appState.replay.timer) {
+    clearInterval(appState.replay.timer);
+  }
 
   appState.replay.timer = setInterval(() => {
     if (appState.replay.currentIndex >= appState.replay.events.length) {
@@ -956,9 +1056,10 @@ function startReplay() {
       return;
     }
     const ev = appState.replay.events[appState.replay.currentIndex];
-    handleIncomingEvent(ev);
+    const norm = normalizeWorkflowEvent(ev);
+    applyWorkflowEvent(norm);
     appState.replay.currentIndex++;
-  }, 1000);
+  }, 750);
 }
 
 function pauseReplay() {
@@ -975,14 +1076,14 @@ function stepReplay() {
   if (!appState.snapshot?.events?.length) return;
   pauseReplay();
 
-  if (appState.replay.currentIndex >= appState.snapshot.events.length) {
-    appState.replay.currentIndex = 0;
-    resetGraph();
-    document.getElementById('terminal-feed-container').innerHTML = '';
+  const events = appState.snapshot.events;
+  if (appState.replay.currentIndex >= events.length) {
+    return;
   }
 
-  const ev = appState.snapshot.events[appState.replay.currentIndex];
-  handleIncomingEvent(ev);
+  const ev = events[appState.replay.currentIndex];
+  const norm = normalizeWorkflowEvent(ev);
+  applyWorkflowEvent(norm);
   appState.replay.currentIndex++;
 }
 
@@ -992,7 +1093,11 @@ function resetReplay() {
   resetGraph();
   document.getElementById('terminal-feed-container').innerHTML = '';
   appState.events = [];
+  appState.seenEventIds.clear();
+  hideRecoveryProof();
+  updateFourQuestionsInspector(appState.snapshot);
   updateStreamStatus('COMPLETED ARCHIVE', false);
+  startReplay();
 }
 
 // ==========================================================================

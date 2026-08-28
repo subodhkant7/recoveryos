@@ -382,8 +382,14 @@ class InMemoryWorkflowStore(BaseWorkflowStore):
                         f"OCC Conflict: Workflow '{wf_id}' is at version {current_version}, expected {expected_version}"
                     )
 
-            new_version = current_version + 1 if current else workflow_data.get("version", 1)
             data = copy.deepcopy(workflow_data)
+            if "created_at" not in data or not data["created_at"]:
+                if current and "created_at" in current:
+                    data["created_at"] = current["created_at"]
+                else:
+                    data["created_at"] = datetime.now(timezone.utc).isoformat()
+
+            new_version = current_version + 1 if current else workflow_data.get("version", 1)
             data["version"] = new_version
             data["updated_at"] = datetime.now(timezone.utc).isoformat()
             self._workflows[wf_id] = data
@@ -457,7 +463,13 @@ class InMemoryWorkflowStore(BaseWorkflowStore):
     async def append_event(self, workflow_id: str, event_data: dict[str, Any]) -> None:
         if workflow_id not in self._events:
             self._events[workflow_id] = []
-        self._events[workflow_id].append(copy.deepcopy(event_data))
+        now_iso = datetime.now(timezone.utc).isoformat()
+        ev_copy = copy.deepcopy(event_data)
+        if "timestamp" not in ev_copy or not ev_copy["timestamp"]:
+            ev_copy["timestamp"] = now_iso
+        if "occurred_at" not in ev_copy or not ev_copy["occurred_at"]:
+            ev_copy["occurred_at"] = ev_copy["timestamp"]
+        self._events[workflow_id].append(ev_copy)
 
     async def get_events(self, workflow_id: str) -> list[dict[str, Any]]:
         return [copy.deepcopy(e) for e in self._events.get(workflow_id, [])]
@@ -843,6 +855,14 @@ class FirestoreWorkflowStore(BaseWorkflowStore):
             @firestore.async_transactional
             async def _update_with_occ(transaction):
                 snapshot = await doc_ref.get(transaction=transaction)
+                if "created_at" not in data or not data["created_at"]:
+                    if snapshot.exists:
+                        existing_dict = snapshot.to_dict() or {}
+                        if "created_at" in existing_dict:
+                            data["created_at"] = existing_dict["created_at"]
+                    if "created_at" not in data or not data["created_at"]:
+                        data["created_at"] = datetime.now(timezone.utc).isoformat()
+
                 if snapshot.exists:
                     current_ver = snapshot.get("version") or 1
                     if current_ver != expected_version:
@@ -858,6 +878,14 @@ class FirestoreWorkflowStore(BaseWorkflowStore):
             await _update_with_occ(transaction)
         else:
             snapshot = await doc_ref.get()
+            if "created_at" not in data or not data["created_at"]:
+                if snapshot.exists:
+                    existing_dict = snapshot.to_dict() or {}
+                    if "created_at" in existing_dict:
+                        data["created_at"] = existing_dict["created_at"]
+                if "created_at" not in data or not data["created_at"]:
+                    data["created_at"] = datetime.now(timezone.utc).isoformat()
+
             if snapshot.exists:
                 data["version"] = (snapshot.get("version") or 1) + 1
             else:
@@ -943,9 +971,15 @@ class FirestoreWorkflowStore(BaseWorkflowStore):
 
     async def append_event(self, workflow_id: str, event_data: dict[str, Any]) -> None:
         client = await self._get_client()
-        event_id = event_data.get("event_id") or f"ev-{datetime.now(timezone.utc).timestamp()}"
+        now_iso = datetime.now(timezone.utc).isoformat()
+        ev_copy = copy.deepcopy(event_data)
+        if "timestamp" not in ev_copy or not ev_copy["timestamp"]:
+            ev_copy["timestamp"] = now_iso
+        if "occurred_at" not in ev_copy or not ev_copy["occurred_at"]:
+            ev_copy["occurred_at"] = ev_copy["timestamp"]
+        event_id = ev_copy.get("event_id") or f"ev-{datetime.now(timezone.utc).timestamp()}"
         doc_ref = client.collection("workflows").document(workflow_id).collection("events").document(event_id)
-        await doc_ref.set(event_data)
+        await doc_ref.set(ev_copy)
 
     async def get_events(self, workflow_id: str) -> list[dict[str, Any]]:
         client = await self._get_client()

@@ -16,6 +16,16 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
+def utc_now() -> datetime:
+    """Canonical UTC datetime helper."""
+    return datetime.now(timezone.utc)
+
+
+def utc_now_iso() -> str:
+    """Canonical UTC ISO-8601 formatted string helper."""
+    return datetime.now(timezone.utc).isoformat()
+
+
 class EventType(str, Enum):
     """Classification of workflow events."""
 
@@ -50,4 +60,5 @@ class WorkflowEvent(BaseModel):
     detail: str = ""
     payload: dict[str, Any] = Field(default_factory=dict)
     actor: str = ""  # "taskmaster" | "recovery_specialist" | "policy_engine" | "human" | "system"
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=utc_now)
+    occurred_at: datetime = Field(default_factory=utc_now)
