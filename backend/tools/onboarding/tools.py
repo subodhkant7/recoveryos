@@ -479,9 +479,10 @@ class OnboardingTools:
             await self._engine.record_step_failed(workflow_id, step_id, error=err_msg)
             return {"status": "error", "message": err_msg}
 
-        contract = wf.get("contract", {})
+        from backend.models.workflow import normalize_contract
+        contract = normalize_contract(wf.get("contract", {}), workflow_id=workflow_id)
         outcomes = contract.get("required_outcomes", [])
-        target = next((o for o in outcomes if o.get("outcome_id") == outcome_id), None)
+        target = next((o for o in outcomes if isinstance(o, dict) and o.get("outcome_id") == outcome_id), None)
 
         if not target:
             err_msg = f"Outcome '{outcome_id}' not found in contract"
@@ -749,8 +750,9 @@ class OnboardingTools:
                 "message": f"Cannot submit recovery plan for workflow in terminal state '{current_state}'",
             }
 
-        contract = wf.get("contract", {})
-        required_outcomes = [o.get("outcome_id") for o in contract.get("required_outcomes", [])]
+        from backend.models.workflow import normalize_contract
+        contract = normalize_contract(wf.get("contract", {}), workflow_id=workflow_id)
+        required_outcomes = [(o.get("outcome_id") if isinstance(o, dict) else str(o)) for o in contract.get("required_outcomes", [])]
 
         # 2. Validate target outcome
         if target_outcome_id not in required_outcomes:

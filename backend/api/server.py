@@ -1215,13 +1215,19 @@ def _build_agent_prompt(
     contract: dict[str, Any],
 ) -> str:
     """Build the initial prompt for the agent with full workflow context."""
-    workflow_id = snapshot["workflow"]["workflow_id"]
+    from backend.models.workflow import normalize_contract, normalize_customer_data, normalize_workflow_snapshot
+    snapshot = normalize_workflow_snapshot(snapshot)
+    customer = normalize_customer_data(customer)
+    contract = normalize_contract(contract)
+
+    workflow = snapshot.get("workflow", {})
+    workflow_id = workflow.get("workflow_id", "")
 
     completed_steps = [
-        s for s in snapshot.get("steps", []) if s.get("status") == "COMPLETED"
+        s for s in snapshot.get("steps", []) if isinstance(s, dict) and s.get("status") == "COMPLETED"
     ]
     failed_steps = [
-        s for s in snapshot.get("steps", []) if s.get("status") == "FAILED"
+        s for s in snapshot.get("steps", []) if isinstance(s, dict) and s.get("status") == "FAILED"
     ]
     outcomes = contract.get("required_outcomes", [])
     constraints = contract.get("constraints", [])
@@ -1241,15 +1247,31 @@ OUTCOME CONTRACT — Required Outcomes:
 """
 
     for o in outcomes:
-        verified = "✅ VERIFIED" if o.get("verified") else "❌ NOT VERIFIED"
-        prompt += f"- {o['outcome_id']}: {o['description']} [{verified}]\n"
-        if o.get("acceptance_criteria"):
-            prompt += f"  Criteria: {json.dumps(o['acceptance_criteria'])}\n"
+        if isinstance(o, dict):
+            o_id = o.get("outcome_id", "")
+            o_desc = o.get("description", "")
+            is_ver = bool(o.get("verified", False))
+            crit = o.get("acceptance_criteria")
+        else:
+            o_id = str(o)
+            o_desc = str(o)
+            is_ver = False
+            crit = None
+        verified = "✅ VERIFIED" if is_ver else "❌ NOT VERIFIED"
+        prompt += f"- {o_id}: {o_desc} [{verified}]\n"
+        if crit:
+            prompt += f"  Criteria: {json.dumps(crit)}\n"
 
     if constraints:
         prompt += "\nCONSTRAINTS:\n"
         for c in constraints:
-            prompt += f"- {c['constraint_id']}: {c['description']}\n"
+            if isinstance(c, dict):
+                c_id = c.get("constraint_id", "")
+                c_desc = c.get("description", "")
+            else:
+                c_id = str(c)
+                c_desc = str(c)
+            prompt += f"- {c_id}: {c_desc}\n"
 
     if prohibited:
         prompt += f"\nPROHIBITED OUTCOMES: {', '.join(prohibited)}\n"

@@ -19,6 +19,8 @@ from backend.models.workflow import (
     Workflow,
     WorkflowState,
     VALID_TRANSITIONS,
+    normalize_contract,
+    normalize_customer_data,
 )
 from backend.models.events import EventType, WorkflowEvent
 from backend.persistence.workflow_store import WorkflowStore
@@ -57,19 +59,21 @@ class WorkflowEngine:
 
         Returns the workflow dict (serialized Workflow model).
         """
-        wf_id = workflow_id or contract_data.get("workflow_id") or str(uuid.uuid4())
+        norm_customer = normalize_customer_data(customer_data)
+        norm_contract = normalize_contract(contract_data, workflow_id=workflow_id or "")
+        wf_id = workflow_id or norm_contract.get("workflow_id") or str(uuid.uuid4())
+        norm_contract["workflow_id"] = wf_id
+
         workflow = Workflow(
             workflow_id=wf_id,
             tenant_id=tenant_id,
             name=name,
             scenario=scenario,
-            customer_data=customer_data,
+            customer_data=norm_customer,
         )
-        # Attach the outcome contract
-        contract_data["workflow_id"] = workflow.workflow_id
-        workflow.contract = None  # Will store contract_data separately
+        workflow.contract = None  # Will store norm_contract separately
         wf_data = workflow.model_dump(mode="json")
-        wf_data["contract"] = contract_data
+        wf_data["contract"] = norm_contract
 
         await self._store.save_workflow(wf_data)
         await self._record_event(
@@ -77,7 +81,7 @@ class WorkflowEngine:
             event_type=EventType.STATE_CHANGE,
             title="Workflow Created",
             detail=f"Workflow '{name}' created for scenario '{scenario}'",
-            payload={"state": WorkflowState.CREATED.value, "customer_data": customer_data},
+            payload={"state": WorkflowState.CREATED.value, "customer_data": norm_customer},
             actor="system",
         )
         return wf_data
@@ -145,11 +149,13 @@ class WorkflowEngine:
         current_state = wf_data.get("state")
         steps = await self._store.get_steps(workflow_id)
         for step in steps:
-            if step.get("status") in ("RUNNING", "PENDING"):
-                step_id = step["step_id"]
+            if isinstance(step, dict) and step.get("status") in ("RUNNING", "PENDING"):
+                step_id = step.get("step_id")
+                if not step_id:
+                    continue
                 tool_name = step.get("tool_name", "")
                 idem_key = step.get("idempotency_key", "")
-                tool_args = step.get("tool_args", {})
+                tool_args = step.get("tool_args", {}) if isinstance(step.get("tool_args"), dict) else {}
                 cust_id = tool_args.get("customer_id", "")
                 kwargs_clean = {k: v for k, v in tool_args.items() if k != "customer_id"}
 

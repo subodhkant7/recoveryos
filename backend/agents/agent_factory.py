@@ -150,7 +150,7 @@ def _build_before_tool_callback(
                     description=decision.reason,
                     dedup_key=dedup_key,
                     status=ApprovalStatus.PENDING,
-                    evidence_ids=[e["evidence_id"] for e in evidence],
+                    evidence_ids=[(e.get("evidence_id") if isinstance(e, dict) else str(e)) for e in evidence],
                 )
                 await store.save_approval(workflow_id, approval.model_dump(mode="json"))
                 approval_id = approval.approval_id

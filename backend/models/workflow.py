@@ -248,3 +248,147 @@ class Workflow(BaseModel):
     def is_paused(self) -> bool:
         """Check if the workflow is waiting for external input."""
         return self.state == WorkflowState.AWAITING_APPROVAL
+
+
+# ---------------------------------------------------------------------------
+# Canonical Data Normalization & Validation Functions
+# ---------------------------------------------------------------------------
+
+import json
+
+
+def normalize_contract(contract_data: Any, workflow_id: str = "") -> dict[str, Any]:
+    """
+    Deterministically normalize any contract representation into a canonical dict schema.
+    Guarantees required_outcomes and constraints are list[dict] with valid string keys.
+    """
+    if contract_data is None:
+        contract_data = {}
+    elif isinstance(contract_data, str):
+        try:
+            contract_data = json.loads(contract_data)
+        except Exception:
+            contract_data = {}
+    elif hasattr(contract_data, "model_dump"):
+        contract_data = contract_data.model_dump(mode="json")
+
+    if not isinstance(contract_data, dict):
+        contract_data = {}
+
+    wf_id = contract_data.get("workflow_id") or workflow_id
+    contract_data["workflow_id"] = str(wf_id) if wf_id else ""
+
+    # Normalize required_outcomes
+    raw_outcomes = contract_data.get("required_outcomes", [])
+    if not isinstance(raw_outcomes, list):
+        raw_outcomes = []
+
+    normalized_outcomes: list[dict[str, Any]] = []
+    for item in raw_outcomes:
+        if isinstance(item, str):
+            normalized_outcomes.append({
+                "outcome_id": item,
+                "description": item.replace("_", " ").title(),
+                "acceptance_criteria": {},
+                "verification_method": "",
+                "required_evidence": [],
+                "verified": False,
+                "evidence_ids": [],
+            })
+        elif isinstance(item, dict):
+            normalized_outcomes.append({
+                "outcome_id": str(item.get("outcome_id", "")),
+                "description": str(item.get("description", "")),
+                "acceptance_criteria": item.get("acceptance_criteria", {}) if isinstance(item.get("acceptance_criteria"), dict) else {},
+                "verification_method": str(item.get("verification_method", "")),
+                "required_evidence": list(item.get("required_evidence", [])) if isinstance(item.get("required_evidence"), list) else [],
+                "verified": bool(item.get("verified", False)),
+                "evidence_ids": list(item.get("evidence_ids", [])) if isinstance(item.get("evidence_ids"), list) else [],
+            })
+        elif hasattr(item, "model_dump"):
+            normalized_outcomes.append(item.model_dump(mode="json"))
+    contract_data["required_outcomes"] = normalized_outcomes
+
+    # Normalize constraints
+    raw_constraints = contract_data.get("constraints", [])
+    if not isinstance(raw_constraints, list):
+        raw_constraints = []
+
+    normalized_constraints: list[dict[str, Any]] = []
+    for item in raw_constraints:
+        if isinstance(item, str):
+            normalized_constraints.append({
+                "constraint_id": item,
+                "description": item.replace("_", " ").title(),
+                "enforcement": "policy",
+            })
+        elif isinstance(item, dict):
+            normalized_constraints.append({
+                "constraint_id": str(item.get("constraint_id", "")),
+                "description": str(item.get("description", "")),
+                "enforcement": str(item.get("enforcement", "policy")),
+            })
+        elif hasattr(item, "model_dump"):
+            normalized_constraints.append(item.model_dump(mode="json"))
+    contract_data["constraints"] = normalized_constraints
+
+    # Normalize prohibited_outcomes
+    raw_prohibited = contract_data.get("prohibited_outcomes", [])
+    if not isinstance(raw_prohibited, list):
+        raw_prohibited = []
+    normalized_prohibited: list[str] = []
+    for item in raw_prohibited:
+        if isinstance(item, str):
+            normalized_prohibited.append(item)
+        elif isinstance(item, dict):
+            desc = item.get("description") or item.get("outcome_id") or str(item)
+            normalized_prohibited.append(str(desc))
+        else:
+            normalized_prohibited.append(str(item))
+    contract_data["prohibited_outcomes"] = normalized_prohibited
+
+    return contract_data
+
+
+def normalize_customer_data(customer_data: Any) -> dict[str, Any]:
+    """Deterministically normalize customer data into a dictionary."""
+    if customer_data is None:
+        return {}
+    if isinstance(customer_data, str):
+        try:
+            parsed = json.loads(customer_data)
+            return parsed if isinstance(parsed, dict) else {"customer_id": customer_data}
+        except Exception:
+            return {"customer_id": customer_data}
+    if isinstance(customer_data, dict):
+        return customer_data
+    if hasattr(customer_data, "model_dump"):
+        return customer_data.model_dump(mode="json")
+    return {}
+
+
+def normalize_workflow_snapshot(snapshot: Any) -> dict[str, Any]:
+    """Deterministically normalize workflow snapshot dict."""
+    if snapshot is None:
+        return {"workflow": {}, "steps": [], "evidence": [], "failures": [], "approvals": []}
+    if isinstance(snapshot, str):
+        try:
+            snapshot = json.loads(snapshot)
+        except Exception:
+            snapshot = {}
+    if not isinstance(snapshot, dict):
+        return {"workflow": {}, "steps": [], "evidence": [], "failures": [], "approvals": []}
+
+    wf = snapshot.get("workflow", {})
+    if isinstance(wf, str):
+        try:
+            wf = json.loads(wf)
+        except Exception:
+            wf = {}
+    snapshot["workflow"] = wf if isinstance(wf, dict) else {}
+    snapshot["steps"] = snapshot.get("steps", []) if isinstance(snapshot.get("steps"), list) else []
+    snapshot["evidence"] = snapshot.get("evidence", []) if isinstance(snapshot.get("evidence"), list) else []
+    snapshot["failures"] = snapshot.get("failures", []) if isinstance(snapshot.get("failures"), list) else []
+    snapshot["approvals"] = snapshot.get("approvals", []) if isinstance(snapshot.get("approvals"), list) else []
+    return snapshot
+

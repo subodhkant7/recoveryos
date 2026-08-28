@@ -142,7 +142,8 @@ class PolicyEngine:
 
         # Check: identity_first constraint
         for c in constraints:
-            if c.get("constraint_id") == "identity_first":
+            c_id = c.get("constraint_id") if isinstance(c, dict) else str(c)
+            if c_id == "identity_first":
                 if tool_name != "verify_identity" and "verify_identity" not in completed_tools:
                     return PolicyRuleResult(
                         rule_name="step_ordering",
@@ -151,7 +152,7 @@ class PolicyEngine:
                     )
 
             # Check: risk_before_billing constraint
-            if c.get("constraint_id") == "risk_before_billing":
+            if c_id == "risk_before_billing":
                 if tool_name == "setup_billing" and "run_risk_check" not in completed_tools:
                     return PolicyRuleResult(
                         rule_name="step_ordering",

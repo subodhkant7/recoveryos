@@ -9,9 +9,15 @@ Shared between API direct dispatch and asynchronous Worker event consumers.
 from __future__ import annotations
 
 import logging
+import traceback
 from typing import Any
 
-from backend.models.workflow import WorkflowState
+from backend.models.workflow import (
+    WorkflowState,
+    normalize_contract,
+    normalize_customer_data,
+    normalize_workflow_snapshot,
+)
 from backend.models.events import EventType
 from backend.persistence.workflow_store import BaseWorkflowStore
 from backend.engine.workflow_engine import WorkflowEngine
@@ -26,14 +32,18 @@ def build_agent_prompt(
     contract: dict[str, Any],
 ) -> str:
     """Build the initial prompt for the agent with full workflow context."""
+    snapshot = normalize_workflow_snapshot(snapshot)
+    customer = normalize_customer_data(customer)
+    contract = normalize_contract(contract)
+
     workflow = snapshot.get("workflow", {})
     workflow_id = workflow.get("workflow_id", "")
 
     completed_steps = [
-        s for s in snapshot.get("steps", []) if s.get("status") == "COMPLETED"
+        s for s in snapshot.get("steps", []) if isinstance(s, dict) and s.get("status") == "COMPLETED"
     ]
     failed_steps = [
-        s for s in snapshot.get("steps", []) if s.get("status") == "FAILED"
+        s for s in snapshot.get("steps", []) if isinstance(s, dict) and s.get("status") == "FAILED"
     ]
     outcomes = contract.get("required_outcomes", [])
     constraints = contract.get("constraints", [])
@@ -53,13 +63,29 @@ OUTCOME CONTRACT — Required Outcomes:
 """
 
     for o in outcomes:
-        verified = "✅ VERIFIED" if o.get("verified") else "❌ NOT VERIFIED"
-        prompt += f"- {o['outcome_id']}: {o['description']} [{verified}]\n"
+        if isinstance(o, dict):
+            o_id = o.get("outcome_id", "")
+            o_desc = o.get("description", "")
+            is_ver = bool(o.get("verified", False))
+        else:
+            o_id = str(o)
+            o_desc = str(o)
+            is_ver = False
+        verified = "✅ VERIFIED" if is_ver else "❌ NOT VERIFIED"
+        prompt += f"- {o_id}: {o_desc} [{verified}]\n"
 
     if constraints:
         prompt += "\nCONSTRAINTS:\n"
         for c in constraints:
-            prompt += f"- {c['constraint_id']}: {c['description']} (severity: {c.get('severity', 'hard')})\n"
+            if isinstance(c, dict):
+                c_id = c.get("constraint_id", "")
+                c_desc = c.get("description", "")
+                c_sev = c.get("severity", "hard")
+            else:
+                c_id = str(c)
+                c_desc = str(c)
+                c_sev = "hard"
+            prompt += f"- {c_id}: {c_desc} (severity: {c_sev})\n"
 
     if prohibited:
         prompt += "\nPROHIBITED OUTCOMES:\n"
@@ -77,11 +103,12 @@ OUTCOME CONTRACT — Required Outcomes:
         for s in failed_steps:
             prompt += f"- Step '{s.get('name', '')}' ({s.get('tool_name', '')}): FAILED — {s.get('error', 'unknown error')}\n"
 
-    failures = snapshot.get("failures", [])
+    failures = [f for f in snapshot.get("failures", []) if isinstance(f, dict)]
     if failures:
         prompt += "\nACTIVE FAILURE SIGNALS:\n"
         for f in failures:
             prompt += f"- Failure in '{f.get('component', '')}': {f.get('error_message', '')}\n"
+
 
     prompt += """
 INSTRUCTIONS:
@@ -226,10 +253,11 @@ async def run_workflow_agent(
 
             # Re-fetch authoritative workflow to inspect latest verified contract
             wf_final = await store.get_workflow(workflow_id) or wf_final
-            contract = wf_final.get("contract", {})
+            contract = normalize_contract(wf_final.get("contract", {}), workflow_id=workflow_id)
+            req_outcomes = contract.get("required_outcomes", [])
             all_verified = all(
-                o.get("verified", False)
-                for o in contract.get("required_outcomes", [])
+                (o.get("verified", False) if isinstance(o, dict) else False)
+                for o in req_outcomes
             )
 
             if all_verified:
@@ -242,9 +270,9 @@ async def run_workflow_agent(
                 return {"status": "COMPLETED", "workflow_id": workflow_id}
             else:
                 unverified = [
-                    o["outcome_id"]
-                    for o in contract.get("required_outcomes", [])
-                    if not o.get("verified", False)
+                    (o.get("outcome_id") if isinstance(o, dict) else str(o))
+                    for o in req_outcomes
+                    if not (o.get("verified", False) if isinstance(o, dict) else False)
                 ]
                 await engine.transition(
                     workflow_id,
@@ -260,13 +288,19 @@ async def run_workflow_agent(
         }
 
     except Exception as e:
-        logger.error(f"Agent execution error on workflow '{workflow_id}': {e}", exc_info=True)
+        err_msg = str(e) or type(e).__name__
+        tb_str = traceback.format_exc()
+        logger.error(f"Agent execution error on workflow '{workflow_id}': {type(e).__name__}: {err_msg}\n{tb_str}")
         await engine._record_event(
             workflow_id=workflow_id,
             event_type=EventType.STEP_FAILED,
             title="Agent Execution Error",
-            detail=str(e),
-            payload={"error_type": type(e).__name__},
+            detail=err_msg,
+            payload={
+                "error_type": type(e).__name__,
+                "error_message": err_msg,
+                "workflow_id": workflow_id,
+            },
             actor="system",
         )
         try:
@@ -280,4 +314,4 @@ async def run_workflow_agent(
                 )
         except Exception:
             pass
-        return {"status": "ERROR", "workflow_id": workflow_id, "error": str(e)}
+        return {"status": "ERROR", "workflow_id": workflow_id, "error": err_msg}
