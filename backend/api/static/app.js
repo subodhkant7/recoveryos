@@ -216,7 +216,21 @@ function applyWorkflowEvent(normalizedEvent) {
     hideToolExecution();
     // Phase 31 Finding 2: Only show Recovery Proof for COMPLETED workflows
     if (normalizedEvent.state === 'COMPLETED') {
-      showRecoveryProof(appState.snapshot);
+      if (appState.activeWorkflowId) {
+        apiFetch(`/api/workflows/${appState.activeWorkflowId}`).then((freshSnap) => {
+          if (freshSnap?.workflow) {
+            appState.snapshot = freshSnap;
+            appState.workflow = freshSnap.workflow;
+            showRecoveryProof(freshSnap);
+          } else {
+            showRecoveryProof(appState.snapshot);
+          }
+        }).catch(() => {
+          showRecoveryProof(appState.snapshot);
+        });
+      } else {
+        showRecoveryProof(appState.snapshot);
+      }
     }
     showReplayToolbar();
     refreshFleetData();

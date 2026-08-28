@@ -118,6 +118,21 @@ async def test_06_in_memory_fail_closed_on_error():
 import uuid
 
 
+def _is_emulator_available() -> bool:
+    host = os.environ.get("FIRESTORE_EMULATOR_HOST")
+    if not host:
+        return False
+    import socket
+    try:
+        parts = host.split(":")
+        ip = parts[0]
+        port = int(parts[1]) if len(parts) > 1 else 8080
+        with socket.create_connection((ip, port), timeout=0.5):
+            return True
+    except (OSError, ValueError):
+        return False
+
+
 @pytest.fixture
 def firestore_limiter():
     store = FirestoreWorkflowStore(project_id="recoveryos-eval")
@@ -125,6 +140,7 @@ def firestore_limiter():
     return FirestoreDistributedQuotaLimiter(client_or_store=store, min_interval_seconds=6.5, document_id=doc_id)
 
 
+@pytest.mark.skipif(not _is_emulator_available(), reason="Firestore emulator host not active")
 @pytest.mark.asyncio
 async def test_07_firestore_first_acquire_and_spacing(firestore_limiter):
     """First and second acquire against Firestore emulator enforce OCC leased window."""
@@ -137,6 +153,7 @@ async def test_07_firestore_first_acquire_and_spacing(firestore_limiter):
     assert r2.lease_version > r1.lease_version
 
 
+@pytest.mark.skipif(not _is_emulator_available(), reason="Firestore emulator host not active")
 @pytest.mark.asyncio
 async def test_08_firestore_concurrent_workers_serialized(firestore_limiter):
     """Multiple concurrent workers against Firestore emulator obtain serialized slots."""
@@ -189,6 +206,7 @@ def _mp_worker_task(worker_id: str, doc_id: str, results_queue: multiprocessing.
         results_queue.put({"error": str(e)})
 
 
+@pytest.mark.skipif(not _is_emulator_available(), reason="Firestore emulator host not active")
 def test_10_multiprocess_cross_process_serialization():
     """Separate OS processes execute against Firestore emulator, proving cross-process lease serialization."""
     mp_ctx = multiprocessing.get_context("spawn")

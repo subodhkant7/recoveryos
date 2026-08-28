@@ -382,9 +382,8 @@ class ResilientGemini(Gemini):
                     extra={"category": category.value, "attempt": attempt, "error_type": type(e).__name__},
                 )
 
-                await self.circuit_breaker.record_failure()
-
                 if category == ErrorCategory.NON_RETRYABLE or attempt > self.max_retries:
+                    await self.circuit_breaker.record_failure()
                     if attempt > self.max_retries:
                         record_resilience_event(
                             event_type="RETRY_EXHAUSTED",

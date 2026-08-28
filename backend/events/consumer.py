@@ -256,10 +256,12 @@ class WorkflowEventConsumer:
             if self._agent_factory:
                 # In distributed multi-process environments (Cloud Run), auto-configure scenario failure injections
                 scenario_name = wf.get("scenario")
-                if scenario_name and hasattr(self._agent_factory, "services") and hasattr(self._agent_factory.services, "failure_injector"):
+                services = getattr(self._agent_factory, "services", getattr(self._agent_factory, "_services", None))
+                injector = getattr(services, "failure_injector", getattr(services, "_injector", None)) if services else None
+                if scenario_name and injector:
                     try:
                         from backend.simulation.scenarios import configure_demo_scenario
-                        configure_demo_scenario(self._agent_factory.services.failure_injector, message.workflow_id, scenario_name)
+                        configure_demo_scenario(injector, message.workflow_id, scenario_name)
                         logger.info(
                             f"Auto-configured scenario '{scenario_name}' on worker",
                             extra={"workflow_id": message.workflow_id, "scenario": scenario_name},

@@ -225,6 +225,14 @@ class AgentFactory:
         self._policy_engine = policy_engine
         self._tools = OnboardingTools(services, store, engine)
 
+    @property
+    def services(self) -> SimulatedServices:
+        return self._services
+
+    @property
+    def tools(self) -> OnboardingTools:
+        return self._tools
+
     def create_taskmaster(self) -> LlmAgent:
         """Create the Taskmaster agent with all onboarding tools."""
         callback = _build_before_tool_callback(

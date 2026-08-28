@@ -51,6 +51,10 @@ class SimulatedServices:
             "notifications": {"status": "healthy", "latency_ms": 150},
         }
 
+    @property
+    def failure_injector(self) -> FailureInjector:
+        return self._injector
+
     # ------------------------------------------------------------------
     # Authoritative External State Reconciliation
     # ------------------------------------------------------------------
@@ -271,15 +275,7 @@ class SimulatedServices:
         if service_key not in self._service_status:
             return {"status": "error", "error_type": "UNKNOWN_PROVIDER", "message": f"Billing provider '{provider}' is not supported"}
 
-        existing = self._billing_records.get(customer_id)
-        if (
-            existing
-            and existing.get("provider") == provider
-            and existing.get("plan_tier") == plan_tier
-            and existing.get("billing_cycle") == billing_cycle
-        ):
-            return {**existing, "status": "success"}
-
+        # Check failure injector FIRST before any cached state
         failure = await self._injector.check_failure(
             workflow_id, "setup_billing", context={"provider": provider}
         )
@@ -295,6 +291,15 @@ class SimulatedServices:
                 if idempotency_key:
                     self._operations_by_key[idempotency_key] = record
                 return {**record, "status": "success"}
+
+        existing = self._billing_records.get(customer_id)
+        if (
+            existing
+            and existing.get("provider") == provider
+            and existing.get("plan_tier") == plan_tier
+            and existing.get("billing_cycle") == billing_cycle
+        ):
+            return {**existing, "status": "success"}
 
         subscription_id = f"sub-{uuid.uuid4().hex[:8]}"
         record = {
