@@ -218,3 +218,45 @@ async def test_g_simulated_services_multi_workflow_isolation():
     )
     assert res2.get("status") == "error"
     assert res2.get("error_type") == "service_unavailable"
+
+
+def test_frontend_pipeline_static_audit():
+    """Verify frontend pipeline code contains canonical helpers, finalizeWorkflow, and proof rendering."""
+    import os, re
+    js_path = os.path.join(os.path.dirname(__file__), "..", "backend", "api", "static", "app.js")
+    with open(js_path) as f:
+        js = f.read()
+
+    # 1. Canonical completion detector exists
+    assert "function isWorkflowCompleted(workflow, event)" in js
+    assert "workflow?.state === 'COMPLETED'" in js
+
+    # 2. Event deduplication helper exists
+    assert "function getEventDeduplicationKey(rawEvent)" in js
+
+    # 3. Missing events reconciler exists
+    assert "function renderMissingEvents(authoritativeEvents)" in js
+
+    # 4. Finalize workflow helper exists and reconciles missing events before proof
+    assert "async function finalizeWorkflow(workflowId" in js
+    assert "renderMissingEvents(freshSnap.events)" in js
+    assert "showRecoveryProof(freshSnap)" in js
+
+    # 5. showRecoveryProof populates proof and unhides certificate
+    assert "function showRecoveryProof(snapshot)" in js
+    assert "cert.classList.remove('hidden')" in js
+
+    # 6. HTML contains certificate container with correct IDs
+    html_path = os.path.join(os.path.dirname(__file__), "..", "backend", "api", "static", "index.html")
+    with open(html_path) as f:
+        html = f.read()
+
+    assert 'id="recovery-proof-certificate"' in html
+    assert 'id="proof-scenario-name"' in html
+    assert 'id="proof-incident-type"' in html
+    assert 'id="proof-time-action"' in html
+    assert 'id="proof-verification-text"' in html
+    assert 'id="proof-intervention"' in html
+    assert 'id="proof-mttr"' in html
+    assert 'id="proof-contract-status"' in html
+    assert 'id="terminal-feed-container"' in html

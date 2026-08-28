@@ -153,12 +153,89 @@ function normalizeWorkflowEvent(rawEvent) {
 }
 
 // ==========================================================================
-// 3. Deterministic Event Application Machine
+// 3. Deterministic Event Application Machine & Canonical State Helpers
 // ==========================================================================
 
+function getEventDeduplicationKey(rawEvent) {
+  if (!rawEvent) return '';
+  if (rawEvent.event_id) return rawEvent.event_id;
+  if (rawEvent.id) return rawEvent.id;
+  const et = rawEvent.event_type || '';
+  const ts = rawEvent.timestamp || '';
+  const title = rawEvent.title || '';
+  const detail = rawEvent.detail || '';
+  return `${et}:${ts}:${title}:${detail}`;
+}
+
+function isWorkflowCompleted(workflow, event) {
+  if (workflow?.state === 'COMPLETED') return true;
+  const p = event?.payload;
+  if (p?.to_state === 'COMPLETED' || p?.new_state === 'COMPLETED') return true;
+  if (event?.state === 'COMPLETED') return true;
+  if (event?.title === 'State: VERIFYING → COMPLETED') return true;
+  return false;
+}
+
+function renderMissingEvents(authoritativeEvents) {
+  if (!Array.isArray(authoritativeEvents)) return;
+  authoritativeEvents.forEach((rawEv) => {
+    const key = getEventDeduplicationKey(rawEv);
+    if (!appState.seenEventIds.has(key)) {
+      const norm = normalizeWorkflowEvent(rawEv);
+      applyWorkflowEvent(norm);
+    }
+  });
+}
+
+async function finalizeWorkflow(workflowId, maxRetries = 6, retryDelayMs = 600) {
+  if (!workflowId) return;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const freshSnap = await apiFetch(`/api/workflows/${workflowId}`);
+      if (!freshSnap?.workflow) return;
+
+      appState.snapshot = freshSnap;
+      appState.workflow = freshSnap.workflow;
+
+      // Reconcile and render any missing authoritative events (e.g. VERIFYING → COMPLETED)
+      if (freshSnap.events && freshSnap.events.length > 0) {
+        renderMissingEvents(freshSnap.events);
+      }
+
+      if (isWorkflowCompleted(freshSnap.workflow)) {
+        updateStreamStatus('COMPLETED ARCHIVE', false);
+        illuminateNode('recovered', 'Outcome Verified');
+        updateStoryLifecycle(6);
+        const stageLbl = document.getElementById('graph-stage-label');
+        if (stageLbl) {
+          stageLbl.textContent = '✓ SYSTEM RECOVERED AUTONOMOUSLY';
+          stageLbl.style.color = 'var(--emerald-core)';
+        }
+        hideCinematicIncident();
+        hideToolExecution();
+        showRecoveryProof(freshSnap);
+        showReplayToolbar();
+        refreshFleetData();
+        return;
+      }
+
+      const activeStates = ['EXECUTING', 'CREATED', 'VERIFYING', 'RECOVERING', 'AWAITING_APPROVAL'];
+      if (!activeStates.includes(freshSnap.workflow.state)) {
+        return; // Terminal state other than COMPLETED (e.g. ESCALATED)
+      }
+
+      await new Promise((r) => setTimeout(r, retryDelayMs));
+    } catch (err) {
+      console.warn('[RECOVERY OS] Workflow finalization error:', err);
+      await new Promise((r) => setTimeout(r, retryDelayMs));
+    }
+  }
+}
+
 function applyWorkflowEvent(normalizedEvent) {
-  // Phase 31: Event deduplication — skip already-seen events
-  const evId = normalizedEvent.raw.event_id || normalizedEvent.raw.id;
+  // Phase 31 & 44: Event deduplication — skip already-seen events
+  const evId = normalizedEvent.raw.event_id || normalizedEvent.raw.id || getEventDeduplicationKey(normalizedEvent.raw);
   if (evId) {
     if (appState.seenEventIds.has(evId)) return;
     appState.seenEventIds.add(evId);
@@ -167,12 +244,20 @@ function applyWorkflowEvent(normalizedEvent) {
   appState.events.push(normalizedEvent.raw);
   updateEventCount();
 
-  // Log to terminal
-  appendTerminalLine(
-    normalizedEvent.actorLabel,
-    `${normalizedEvent.title}: ${normalizedEvent.detail}`,
-    normalizedEvent.actorClass
-  );
+  // Log to terminal (format STREAM_END cleanly)
+  if (normalizedEvent.eventType === 'STREAM_END') {
+    appendTerminalLine(
+      'SYSTEM',
+      `Stream finalized (state: ${normalizedEvent.state || 'COMPLETED'})`,
+      'actor-system'
+    );
+  } else {
+    appendTerminalLine(
+      normalizedEvent.actorLabel,
+      `${normalizedEvent.title}: ${normalizedEvent.detail}`,
+      normalizedEvent.actorClass
+    );
+  }
 
   // Stage illuminations
   if (normalizedEvent.stage === 'detect') {
@@ -218,33 +303,13 @@ function applyWorkflowEvent(normalizedEvent) {
     // Phase 31 Finding 2: Only show Recovery Proof for COMPLETED workflows
     if (normalizedEvent.state === 'COMPLETED') {
       if (appState.activeWorkflowId) {
-        apiFetch(`/api/workflows/${appState.activeWorkflowId}`).then((freshSnap) => {
-          if (freshSnap?.workflow) {
-            appState.snapshot = freshSnap;
-            appState.workflow = freshSnap.workflow;
-            if (freshSnap.workflow.state === 'COMPLETED') {
-              updateStreamStatus('COMPLETED ARCHIVE', false);
-              showRecoveryProof(freshSnap);
-            }
-          }
-        }).catch(() => {
-          if (appState.snapshot?.workflow?.state === 'COMPLETED') {
-            showRecoveryProof(appState.snapshot);
-          }
-        });
+        finalizeWorkflow(appState.activeWorkflowId);
       } else if (appState.snapshot?.workflow?.state === 'COMPLETED') {
         showRecoveryProof(appState.snapshot);
       }
     } else if (normalizedEvent.eventType === 'STREAM_END') {
       if (appState.activeWorkflowId) {
-        apiFetch(`/api/workflows/${appState.activeWorkflowId}`).then((freshSnap) => {
-          if (freshSnap?.workflow?.state === 'COMPLETED') {
-            appState.snapshot = freshSnap;
-            appState.workflow = freshSnap.workflow;
-            updateStreamStatus('COMPLETED ARCHIVE', false);
-            showRecoveryProof(freshSnap);
-          }
-        }).catch(() => {});
+        finalizeWorkflow(appState.activeWorkflowId);
       }
     }
     showReplayToolbar();
@@ -299,27 +364,9 @@ async function connectWorkflowStream(workflowId) {
       if (es.readyState === EventSource.CLOSED) {
         appState.eventSource = null;
       }
-      // Authoritative fallback: inspect if workflow reached COMPLETED
+      // Authoritative fallback: reconcile and finalize with durable store
       if (appState.activeWorkflowId === workflowId) {
-        apiFetch(`/api/workflows/${workflowId}`).then((freshSnap) => {
-          if (freshSnap?.workflow) {
-            appState.snapshot = freshSnap;
-            appState.workflow = freshSnap.workflow;
-            if (freshSnap.workflow.state === 'COMPLETED') {
-              updateStreamStatus('COMPLETED ARCHIVE', false);
-              showRecoveryProof(freshSnap);
-              illuminateNode('recovered', 'Outcome Verified');
-              updateStoryLifecycle(6);
-              hideCinematicIncident();
-              hideToolExecution();
-              showReplayToolbar();
-              return;
-            }
-          }
-          updateStreamStatus('STREAM DISCONNECTED', false);
-        }).catch(() => {
-          updateStreamStatus('STREAM DISCONNECTED', false);
-        });
+        finalizeWorkflow(workflowId);
       } else {
         updateStreamStatus('STREAM DISCONNECTED', false);
       }
@@ -330,6 +377,7 @@ async function connectWorkflowStream(workflowId) {
   }
 }
 window.connectWorkflowStream = connectWorkflowStream;
+
 
 function updateStreamStatus(text, isLive) {
   const pill = document.getElementById('stream-status-pill');
@@ -595,7 +643,29 @@ function showRecoveryProof(snapshot) {
   }
 
   cert.classList.remove('hidden');
+
+  // Also append an authoritative certificate line into the live terminal feed at the end
+  const termContainer = document.getElementById('terminal-feed-container');
+  const proofId = `term-proof-${wf.workflow_id || 'active'}`;
+  if (termContainer && !document.getElementById(proofId)) {
+    const termProof = document.createElement('div');
+    termProof.id = proofId;
+    termProof.className = 'terminal-proof-line';
+    termProof.style.cssText = 'border: 1px solid var(--emerald-core); background: rgba(16, 185, 129, 0.08); padding: 8px 10px; margin: 8px 0; border-radius: 4px; font-family: var(--font-mono);';
+    termProof.innerHTML = `
+      <div style="color: var(--emerald-core); font-weight: 800; font-size: 11px; margin-bottom: 4px;">🛡️ RECOVERY PROOF CERTIFICATE VERIFIED &amp; ISSUED</div>
+      <div style="color: #ddd; font-size: 10px; line-height: 1.4;">
+        • <strong style="color: #fff;">INCIDENT:</strong> ${incEl?.textContent || 'Billing Provider Outage'}<br>
+        • <strong style="color: #fff;">ACTION:</strong> ${actionEl?.textContent || 'setup_billing (paypal failover)'}<br>
+        • <strong style="color: #fff;">VERIFICATION:</strong> <span style="color: var(--emerald-core);">${verifyText?.textContent || 'Active Subscription Probe → HTTP 200'}</span><br>
+        • <strong style="color: #fff;">CONTRACT STATUS:</strong> <span style="color: var(--emerald-core);">${statusEl?.textContent || '✓ FULFILLED'}</span>
+      </div>
+    `;
+    termContainer.appendChild(termProof);
+    termContainer.scrollTop = termContainer.scrollHeight;
+  }
 }
+
 
 function hideRecoveryProof() {
   document.getElementById('recovery-proof-certificate')?.classList.add('hidden');
@@ -744,7 +814,7 @@ async function selectWorkflow(workflowId) {
     }
 
     if (snapshot.events && snapshot.events.length > 0) {
-      snapshot.events.forEach((ev) => handleIncomingEvent(ev));
+      renderMissingEvents(snapshot.events);
     }
 
     const activeStates = ['EXECUTING', 'CREATED', 'VERIFYING', 'RECOVERING', 'AWAITING_APPROVAL'];
