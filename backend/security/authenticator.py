@@ -141,6 +141,11 @@ class AuthenticationProvider:
 
         return user
 
+    def get_active_user(self, username: str) -> Optional[UserRecord]:
+        """Return the current server-side identity for refresh-token renewal."""
+        user = self._users.get(username)
+        return user if user and user.is_active else None
+
 
 # Singleton authentication provider
 auth_provider = AuthenticationProvider()

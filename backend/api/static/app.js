@@ -10,6 +10,10 @@ const appState = {
     persona: 'operator',
     tenant: 'tenant-default',
     token: null,
+    refreshToken: null,
+    refreshPromise: null,
+    authExpired: false,
+    expiryMessageShown: false,
   },
   workflow: null,
   activeWorkflowId: null,
@@ -92,6 +96,151 @@ async function apiFetch(url, options = {}) {
   }
   return await res.json();
 }
+
+// Replace the legacy access-token-only client with a renewable session client.
+const AUTH_EXPIRY_SKEW_SECONDS = 30;
+
+function authCacheKey() {
+  const p = PERSONAS[appState.auth.persona] || PERSONAS.operator;
+  return `rec_session_${p.username}_${appState.auth.tenant}`;
+}
+
+function decodeJwtPayload(token) {
+  try {
+    const encoded = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(atob(encoded.padEnd(encoded.length + ((4 - encoded.length % 4) % 4), '=')));
+  } catch {
+    return null;
+  }
+}
+
+function tokenNeedsRefresh(token) {
+  const exp = decodeJwtPayload(token)?.exp;
+  return !exp || exp - Math.floor(Date.now() / 1000) <= AUTH_EXPIRY_SKEW_SECONDS;
+}
+
+function loadAuthSession() {
+  const cached = sessionStorage.getItem(authCacheKey());
+  if (!cached) return null;
+  try {
+    const session = JSON.parse(cached);
+    if (session?.access_token) return session;
+  } catch {
+    // Older releases stored the access token as a plain string.
+  }
+  return { access_token: cached };
+}
+
+function persistAuthSession(data) {
+  appState.auth.token = data.access_token;
+  appState.auth.refreshToken = data.refresh_token || appState.auth.refreshToken;
+  sessionStorage.setItem(authCacheKey(), JSON.stringify({
+    access_token: appState.auth.token,
+    refresh_token: appState.auth.refreshToken,
+  }));
+}
+
+function clearAuthState(showMessage = true) {
+  sessionStorage.removeItem(authCacheKey());
+  appState.auth.token = null;
+  appState.auth.refreshToken = null;
+  appState.auth.authExpired = true;
+  if (showMessage && !appState.auth.expiryMessageShown) {
+    appState.auth.expiryMessageShown = true;
+    alert('Your RecoveryOS session expired. Please authenticate again.');
+  }
+}
+
+async function loginForSession() {
+  const p = PERSONAS[appState.auth.persona] || PERSONAS.operator;
+  const res = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: p.username, role: p.role, tenant_id: appState.auth.tenant }),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    throw new Error(detail.detail || `HTTP ${res.status}`);
+  }
+  const data = await res.json();
+  persistAuthSession(data);
+  appState.auth.authExpired = false;
+  appState.auth.expiryMessageShown = false;
+  return data.access_token;
+}
+
+async function refreshAuthToken() {
+  if (appState.auth.refreshPromise) return appState.auth.refreshPromise;
+  appState.auth.refreshPromise = (async () => {
+    const cached = loadAuthSession();
+    const refreshToken = appState.auth.refreshToken || cached?.refresh_token;
+    try {
+      if (refreshToken) {
+        const res = await fetch('/api/auth/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: refreshToken }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          persistAuthSession(data);
+          appState.auth.authExpired = false;
+          appState.auth.expiryMessageShown = false;
+          return data.access_token;
+        }
+        const detail = await res.json().catch(() => ({}));
+        throw new Error(detail.detail || `HTTP ${res.status}`);
+      }
+      return await loginForSession();
+    } catch (err) {
+      clearAuthState();
+      throw err;
+    } finally {
+      appState.auth.refreshPromise = null;
+    }
+  })();
+  return appState.auth.refreshPromise;
+}
+
+async function renewedGetAuthToken(forceRefresh = false) {
+  const cached = loadAuthSession();
+  const token = appState.auth.token || cached?.access_token;
+  appState.auth.refreshToken = appState.auth.refreshToken || cached?.refresh_token || null;
+  if (token && !forceRefresh && !tokenNeedsRefresh(token)) {
+    appState.auth.token = token;
+    return token;
+  }
+  return refreshAuthToken();
+}
+
+async function renewedApiFetch(url, options = {}, hasRetried = false) {
+  const token = await renewedGetAuthToken();
+  const headers = new Headers(options.headers || {});
+  headers.set('Content-Type', headers.get('Content-Type') || 'application/json');
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  headers.set('X-Tenant-ID', appState.auth.tenant);
+  const res = await fetch(url, { ...options, headers });
+  if (res.status === 401 && !hasRetried) {
+    await refreshAuthToken();
+    return renewedApiFetch(url, options, true);
+  }
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(errData.detail || `HTTP ${res.status}`);
+  }
+  return await res.json();
+}
+
+getAuthToken = renewedGetAuthToken;
+apiFetch = renewedApiFetch;
+
+window.__recoveryosAuth = {
+  apiFetch: renewedApiFetch,
+  getAuthToken: renewedGetAuthToken,
+  refreshAuthToken,
+  clearAuthState,
+  loadAuthSession,
+};
 
 // ==========================================================================
 // 2. Authoritative Helpers (MTTR, Normalization, Sanitization)
@@ -385,7 +534,7 @@ function handleIncomingEvent(event) {
 // 4. Real-Time Single-Use Ticket SSE Stream
 // ==========================================================================
 
-async function connectWorkflowStream(workflowId) {
+async function connectWorkflowStream(workflowId, hasRetried = false) {
   if (appState.eventSource) {
     appState.eventSource.close();
     appState.eventSource = null;
@@ -420,14 +569,14 @@ async function connectWorkflowStream(workflowId) {
     };
 
     es.onerror = () => {
-      if (es.readyState === EventSource.CLOSED) {
-        appState.eventSource = null;
-      }
-      // Authoritative fallback: reconcile and finalize with durable store
-      if (appState.activeWorkflowId === workflowId) {
-        finalizeWorkflow(workflowId);
+      es.close();
+      if (appState.eventSource === es) appState.eventSource = null;
+      if (appState.activeWorkflowId !== workflowId) return;
+      if (!hasRetried) {
+        // Tickets are single-use; never let EventSource retry the consumed URL.
+        connectWorkflowStream(workflowId, true);
       } else {
-        updateStreamStatus('STREAM DISCONNECTED', false);
+        finalizeWorkflow(workflowId);
       }
     };
   } catch (err) {

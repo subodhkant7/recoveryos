@@ -42,3 +42,4 @@ ui-debug.log
 # Artifacts
 artifacts/
 google-cloud-sdk/
+recordings/

@@ -79,6 +79,9 @@ class Config:
     jwt_expiration_minutes: int = field(
         default_factory=lambda: int(os.environ.get("JWT_EXPIRATION_MINUTES", "60"))
     )
+    jwt_refresh_expiration_days: int = field(
+        default_factory=lambda: int(os.environ.get("JWT_REFRESH_EXPIRATION_DAYS", "7"))
+    )
 
     # Gemini Runtime Resilience & Rate Limiting
     gemini_min_interval_seconds: float = field(

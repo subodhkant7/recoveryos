@@ -467,7 +467,13 @@ async def get_events(
     return {"events": events}
 
 
-from backend.security.tokens import create_access_token, verify_access_token, AuthenticationError
+from backend.security.tokens import (
+    create_access_token,
+    create_refresh_token,
+    verify_access_token,
+    verify_refresh_token,
+    AuthenticationError,
+)
 from backend.security.authenticator import auth_provider
 from backend.security.sse_tickets import sse_ticket_store
 from backend.events.broadcast import event_broadcaster
@@ -482,6 +488,10 @@ class LoginRequest(BaseModel):
 
 class SSETicketRequest(BaseModel):
     workflow_id: str
+
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
 
 
 @app.post("/api/auth/login")
@@ -527,6 +537,12 @@ async def login(req: LoginRequest) -> dict[str, Any]:
         tenant_id=user_record.tenant_id,
         secret_key=config.jwt_secret_key,
     )
+    refresh_token = create_refresh_token(
+        user_id=user_record.username,
+        role=user_record.role,
+        tenant_id=user_record.tenant_id,
+        secret_key=config.jwt_secret_key,
+    )
 
     record_security_audit_event(
         event_type="AUTH_LOGIN",
@@ -546,6 +562,49 @@ async def login(req: LoginRequest) -> dict[str, Any]:
         "role": user_record.role.value,
         "tenant_id": user_record.tenant_id,
         "expires_in": config.jwt_expiration_minutes * 60,
+        "refresh_token": refresh_token,
+        "refresh_expires_in": config.jwt_refresh_expiration_days * 24 * 60 * 60,
+    }
+
+
+@app.post("/api/auth/refresh")
+async def refresh(req: RefreshTokenRequest) -> dict[str, Any]:
+    """Exchange a valid refresh token for a fresh short-lived access token."""
+    try:
+        refresh_principal = verify_refresh_token(
+            req.refresh_token,
+            secret_key=config.jwt_secret_key,
+        )
+    except AuthenticationError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    user_record = auth_provider.get_active_user(refresh_principal.user_id)
+    if not user_record:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    access_token = create_access_token(
+        user_id=user_record.username,
+        role=user_record.role,
+        tenant_id=user_record.tenant_id,
+        secret_key=config.jwt_secret_key,
+    )
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user_id": user_record.username,
+        "role": user_record.role.value,
+        "tenant_id": user_record.tenant_id,
+        "expires_in": config.jwt_expiration_minutes * 60,
+        "refresh_token": req.refresh_token,
+        "refresh_expires_in": config.jwt_refresh_expiration_days * 24 * 60 * 60,
     }
 
 
