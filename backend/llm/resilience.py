@@ -305,7 +305,7 @@ class ResilientGemini(Gemini):
     ):
         model_name = model or config.gemini_model
         if model_name in ("gemini-2.5-flash", "gemini-2.5-flash-preview", "gemini-2.0-flash", "gemini-1.5-flash"):
-            model_name = "gemini-3.6-flash"
+            model_name = "gemini-3.5-flash"
         super().__init__(model=model_name, client_kwargs=client_kwargs, **kwargs)
         object.__setattr__(self, "rate_limiter", rate_limiter or global_rate_limiter)
         object.__setattr__(self, "circuit_breaker", circuit_breaker or global_circuit_breaker)

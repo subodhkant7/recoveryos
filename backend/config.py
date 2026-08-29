@@ -21,7 +21,7 @@ class Config:
         default_factory=lambda: os.environ.get("GOOGLE_API_KEY", "")
     )
     gemini_model: str = field(
-        default_factory=lambda: os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+        default_factory=lambda: os.environ.get("GEMINI_MODEL", "gemini-3.5-flash")
     )
 
     # Persistence
