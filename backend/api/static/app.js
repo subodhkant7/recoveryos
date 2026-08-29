@@ -136,6 +136,13 @@ function setOutcomeStatus(outcomeId, status) {
       else if (status === 'in_progress') icon.textContent = '◐';
       else icon.textContent = '○';
     }
+    const label = el.querySelector('.c-label-pill');
+    if (label) {
+      label.textContent = status === 'verified' ? 'VERIFIED'
+        : status === 'failed' ? 'FAILED'
+          : status === 'in_progress' ? 'IN PROGRESS' : 'PENDING';
+      label.className = `c-label-pill ${status}`;
+    }
   }
 }
 
@@ -285,6 +292,12 @@ function applyWorkflowEvent(normalizedEvent) {
   }
 
   appState.events.push(normalizedEvent.raw);
+  if (appState.snapshot) {
+    appState.snapshot.events = appState.snapshot.events || [];
+  }
+  if (appState.snapshot && !appState.snapshot.events.includes(normalizedEvent.raw)) {
+    appState.snapshot.events.push(normalizedEvent.raw);
+  }
   updateEventCount();
 
   const rawTimestamp = normalizedEvent.raw.occurred_at || normalizedEvent.raw.timestamp || normalizedEvent.raw.created_at;
@@ -327,23 +340,8 @@ function applyWorkflowEvent(normalizedEvent) {
     updateStoryLifecycle(5);
   }
 
-  // Dynamic Outcome Panel State Tracking
-  const p = normalizedEvent.payload || {};
-  const toolName = p.tool_name || normalizedEvent.raw.tool_name;
-  if (normalizedEvent.eventType === 'STEP_STARTED' && toolName && TOOL_TO_OUTCOME_MAP[toolName]) {
-    setOutcomeStatus(TOOL_TO_OUTCOME_MAP[toolName], 'in_progress');
-  } else if (normalizedEvent.eventType === 'STEP_FAILED' && toolName && TOOL_TO_OUTCOME_MAP[toolName]) {
-    setOutcomeStatus(TOOL_TO_OUTCOME_MAP[toolName], 'failed');
-  } else if (normalizedEvent.eventType === 'VERIFICATION_RESULT') {
-    const outcomeId = p.outcome_id || normalizedEvent.title.replace('Verification Passed:', '').replace('Verify Outcome:', '').trim();
-    if (normalizedEvent.title.includes('Passed') || p.passed !== false || !p.discrepancies?.length) {
-      setOutcomeStatus(outcomeId, 'verified');
-    } else {
-      setOutcomeStatus(outcomeId, 'failed');
-    }
-  } else if (normalizedEvent.eventType === 'OUTCOME_VERIFIED' || normalizedEvent.title.includes('Verified')) {
-    setOutcomeStatus(p.outcome_id || normalizedEvent.title, 'verified');
-  }
+  // Re-render from the same evidence-derived state used for historical snapshots.
+  if (appState.snapshot) updateFourQuestionsInspector(appState.snapshot);
 
   // Handle state transitions defensively
   if (normalizedEvent.state) {
@@ -1047,7 +1045,7 @@ function updateAutonomyDecisionCard(scenario, wfState) {
 
 function updateFourQuestionsInspector(snapshot) {
   const wf = snapshot.workflow || {};
-  const contract = snapshot.contract || {};
+  const contract = wf.contract || snapshot.contract || {};
   const evidenceList = snapshot.evidence || [];
   const eventsList = snapshot.events || [];
 
@@ -1090,71 +1088,81 @@ function updateFourQuestionsInspector(snapshot) {
     ];
   }
 
-  const verifiedOutcomeIds = new Set();
-  const startedOutcomeIds = new Set();
-  const failedOutcomeIds = new Set();
-
-  evidenceList.forEach((e) => {
-    if (e.outcome_id) verifiedOutcomeIds.add(e.outcome_id);
-  });
-
-  eventsList.forEach((ev) => {
-    const et = (ev.event_type || '').toUpperCase();
-    const title = ev.title || '';
-    const payload = ev.payload || {};
-    const toolName = payload.tool_name || ev.tool_name;
-
-    if (et === 'VERIFICATION_RESULT' && (title.includes('Passed:') || payload.verified === true)) {
-      const oid = payload.outcome_id || title.replace('Verification Passed:', '').trim();
-      if (oid) verifiedOutcomeIds.add(oid);
-    } else if (et === 'VERIFICATION_RESULT' && (title.includes('Failed:') || payload.verified === false)) {
-      const oid = payload.outcome_id || title.replace('Verification Failed:', '').trim();
-      if (oid) failedOutcomeIds.add(oid);
-    } else if ((et === 'STEP_FAILED' || et === 'VERIFICATION_FAILED') && (payload.outcome_id || ev.outcome_id)) {
-      failedOutcomeIds.add(payload.outcome_id || ev.outcome_id);
-    }
-
-    if (et === 'ACTION_EXECUTION_COMPLETED' || et === 'ACTION_EXECUTION_STARTED') {
-      const oid = payload.outcome_id || TOOL_TO_OUTCOME_MAP[toolName];
-      if (oid) startedOutcomeIds.add(oid);
-    }
-  });
+  const outcomeStatuses = deriveOutcomeDisplayStates(requiredOutcomes, evidenceList, eventsList, snapshot.steps || []);
 
   if (criteriaBox) {
     criteriaBox.innerHTML = requiredOutcomes.map((o) => {
       const oid = o.outcome_id;
-      const isVerified = o.verified || verifiedOutcomeIds.has(oid) || (wf.state === 'COMPLETED');
-      const isFailed = failedOutcomeIds.has(oid) && !isVerified;
-      const isStarted = (startedOutcomeIds.has(oid) || o.started || o.in_progress) && !isVerified && !isFailed;
-
-      let statusClass = 'pending';
-      let statusIcon = '○';
-      let statusLabel = 'PENDING';
-
-      if (isVerified) {
-        statusClass = 'verified';
-        statusIcon = '✓';
-        statusLabel = 'VERIFIED';
-      } else if (isFailed) {
-        statusClass = 'failed';
-        statusIcon = '✕';
-        statusLabel = 'FAILED';
-      } else if (isStarted) {
-        statusClass = 'in_progress';
-        statusIcon = '◐';
-        statusLabel = 'IN PROGRESS';
-      }
+      const state = outcomeStatuses[oid] || { status: 'pending', icon: '○', label: 'PENDING' };
 
       return `
-        <div class="criteria-item ${statusClass}" id="crit-${oid}">
-          <span class="c-icon">${statusIcon}</span>
+        <div class="criteria-item ${state.status}" id="crit-${oid}">
+          <span class="c-icon">${state.icon}</span>
           <span class="c-name">${oid}</span>
-          <span class="c-label-pill ${statusClass}">${statusLabel}</span>
+          <span class="c-label-pill ${state.status}">${state.label}</span>
         </div>
       `;
     }).join('');
   }
+
 }
+
+function deriveOutcomeDisplayStates(requiredOutcomes, evidenceList = [], eventsList = [], steps = []) {
+  const records = new Map();
+  const addRecord = (outcomeId, status, timestamp, sequence) => {
+    if (!outcomeId || !['verified', 'failed'].includes(status)) return;
+    const current = records.get(outcomeId);
+    if (!current || `${timestamp || ''}:${sequence}` >= `${current.timestamp || ''}:${current.sequence}`) {
+      records.set(outcomeId, { status, timestamp: timestamp || '', sequence });
+    }
+  };
+
+  evidenceList.forEach((e, sequence) => {
+    if (e?.evidence_type !== 'VERIFICATION') return;
+    const data = e.data || {};
+    const outcomeId = data.outcome_id || data.target || (e.source || '').replace(/^verify:/, '');
+    if (data.passed === true) addRecord(outcomeId, 'verified', e.timestamp, sequence);
+    if (data.passed === false) addRecord(outcomeId, 'failed', e.timestamp, sequence);
+  });
+
+  eventsList.forEach((event, sequence) => {
+    const type = (event?.event_type || '').toUpperCase();
+    const payload = event?.payload || {};
+    const title = event?.title || '';
+    const outcomeId = payload.outcome_id || event?.outcome_id
+      || title.replace(/^Verification (Passed|Failed):\s*/, '').trim();
+    if (type === 'VERIFICATION_RESULT' || type === 'VERIFICATION_FAILED') {
+      if (payload.passed === true || title.includes('Passed:')) addRecord(outcomeId, 'verified', event.occurred_at || event.timestamp, sequence);
+      if (payload.passed === false || title.includes('Failed:')) addRecord(outcomeId, 'failed', event.occurred_at || event.timestamp, sequence);
+    }
+  });
+
+  const started = new Set();
+  steps.forEach((step) => {
+    const outcomeId = step?.target_outcome_id || TOOL_TO_OUTCOME_MAP[step?.tool_name];
+    if (outcomeId && ['PENDING', 'RUNNING'].includes(step.status)) started.add(outcomeId);
+  });
+  eventsList.forEach((event) => {
+    const type = (event?.event_type || '').toUpperCase();
+    const payload = event?.payload || {};
+    const outcomeId = payload.outcome_id || event?.outcome_id || TOOL_TO_OUTCOME_MAP[payload.tool_name || event?.tool_name];
+    if (outcomeId && (type === 'STEP_STARTED' || type === 'ACTION_EXECUTION_STARTED')) started.add(outcomeId);
+  });
+
+  const states = {};
+  requiredOutcomes.forEach((outcome) => {
+    const outcomeId = outcome.outcome_id;
+    const record = records.get(outcomeId);
+    const status = record?.status || (started.has(outcomeId) || outcome.started || outcome.in_progress ? 'in_progress' : 'pending');
+    states[outcomeId] = {
+      status,
+      icon: status === 'verified' ? '✓' : status === 'failed' ? '✕' : status === 'in_progress' ? '◐' : '○',
+      label: status === 'verified' ? 'VERIFIED' : status === 'failed' ? 'FAILED' : status === 'in_progress' ? 'IN PROGRESS' : 'PENDING',
+    };
+  });
+  return states;
+}
+window.deriveOutcomeDisplayStates = deriveOutcomeDisplayStates;
 
 function markCriteriaVerified(outcomeId) {
   setOutcomeStatus(outcomeId, 'verified');
