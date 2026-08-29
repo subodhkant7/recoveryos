@@ -23,7 +23,7 @@ This document catalogs the stable DOM selectors and automated interaction steps 
 | **Approval Banner** | `#approval-action-card` | Displays Human-in-the-Loop escalation |
 | **Authorize Button** | `#btn-submit-approval` | Submits operator approval |
 | **Worker Resilience Card**| `#worker-resilience-card` | Displays OCC lease reconciliation badges |
-| **Recovery Proof Certificate** | `#recovery-proof-certificate` | Final proof card showing independent verification |
+| **Evidence-Backed Recovery Proof** | `#recovery-proof-certificate` | Final proof card showing independent verification evidence |
 | **Decision Trace Inspector** | `#panel-inspector` | Explains 4 core decision audit questions |
 | **Demo Mode Toggle** | `#btn-toggle-demo-mode` | Expands canvas to presentation width |
 | **Replay Play Button** | `#btn-replay-play` | Triggers read-only deterministic replay |

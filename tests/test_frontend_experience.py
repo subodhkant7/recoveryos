@@ -29,7 +29,7 @@ async def test_frontend_01_root_route_serves_html():
         resp = await client.get("/")
         assert resp.status_code == 200
         assert "RECOVERY<span class=\"brand-glow\">OS</span>" in resp.text
-        assert "AUTONOMOUS OPERATIONS COMMAND CENTER" in resp.text
+        assert "RECOVERY CONTROL PLANE • ENTERPRISE AGENT FLEETS" in resp.text
 
 
 @pytest.mark.asyncio

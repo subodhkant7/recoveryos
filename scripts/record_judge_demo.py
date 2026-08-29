@@ -54,7 +54,7 @@ def build_segment_filtergraph(segment_idx):
         
         # Google Cloud Stack Badges
         "drawbox=x=50:y=175:w=620:h=20:color=#07090E@1:t=fill",
-        "drawtext=text='GOOGLE CLOUD STACK\\: ☁ Cloud Run API  |  📨 Cloud Pub/Sub Events  |  ⚡ Cloud Firestore OCC  |  🤖 Gemini 1.5 Pro ADK':fontcolor=#00F0FF:fontsize=10:x=60:y=180",
+        "drawtext=text='GOOGLE CLOUD STACK\\: ☁ Cloud Run API  |  📨 Cloud Pub/Sub Events  |  ⚡ Cloud Firestore OCC  |  🤖 Gemini 3.5 Flash ADK':fontcolor=#00F0FF:fontsize=10:x=60:y=180",
 
         # Main Workspace Container
         "drawbox=x=25:y=215:w=1870:h=805:color=#0E131F@1:t=fill",
@@ -119,7 +119,7 @@ def build_segment_filtergraph(segment_idx):
         f.append(f"drawbox=x=1510:y=265:w=330:h=90:color={bg}@1:t=fill")
         f.append(f"drawbox=x=1510:y=265:w=330:h=90:color={stroke}@1:t=2")
         f.append("drawtext=text='05 RECOVERED':fontcolor=#10B981:fontsize=14:x=1530:y=285")
-        f.append("drawtext=text='Recovery Proof Certificate Issued':fontcolor=#F8FAFC:fontsize=11:x=1530:y=310")
+        f.append("drawtext=text='Evidence-Backed Recovery Proof':fontcolor=#F8FAFC:fontsize=11:x=1530:y=310")
         return f
 
     content_filters = []
@@ -151,7 +151,7 @@ def build_segment_filtergraph(segment_idx):
             "drawbox=x=920:y=560:w=250:h=170:color=#0E131F@1:t=fill",
             "drawbox=x=920:y=560:w=250:h=170:color=#F59E0B@1:t=1",
             "drawtext=text='04. PROVE':fontcolor=#F59E0B:fontsize=15:x=940:y=590",
-            "drawtext=text='Cryptographically bound Recovery Proof with authoritative MTTR.':fontcolor=#94A3B8:fontsize=11:x=940:y=625",
+            "drawtext=text='Evidence-backed Recovery Proof with authoritative MTTR.':fontcolor=#94A3B8:fontsize=11:x=940:y=625",
 
             "drawbox=x=1220:y=435:w=650:h=565:color=#07090E@1:t=fill",
             "drawbox=x=1220:y=435:w=650:h=565:color=#1E293B@1:t=1",
@@ -280,7 +280,7 @@ def build_segment_filtergraph(segment_idx):
             "drawtext=text='switch_payment_gateway(provider=\"adyen\")':fontcolor=#F8FAFC:fontsize=11:x=1260:y=750",
             "drawtext=text='04 HOW DO YOU KNOW IT WORKED?':fontcolor=#10B981:fontsize=13:x=1260:y=820",
             "drawtext=text='✓ Subscription probe HTTP 200 • Subscription active in ground truth':fontcolor=#10B981:fontsize=12:x=1260:y=855",
-            "drawtext=text='Zero duplicate charges verified by cryptographic idempotency hash.':fontcolor=#94A3B8:fontsize=10:x=1260:y=890"
+            "drawtext=text='Zero duplicate charges protected by idempotency and external reconciliation.':fontcolor=#94A3B8:fontsize=10:x=1260:y=890"
         ])
 
     elif segment_idx == 5:
@@ -424,7 +424,7 @@ def build_segment_filtergraph(segment_idx):
 
             "drawbox=x=1370:y=495:w=470:h=250:color=#0E131F@1:t=fill",
             "drawbox=x=1370:y=495:w=470:h=250:color=#10B981@1:t=1.5",
-            "drawtext=text='🤖 Gemini 1.5 Pro & ADK':fontcolor=#10B981:fontsize=16:x=1395:y=530",
+            "drawtext=text='🤖 Gemini 3.5 Flash & ADK':fontcolor=#10B981:fontsize=16:x=1395:y=530",
             "drawtext=text='Autonomous Reasoning & Policy Gate':fontcolor=#F8FAFC:fontsize=12:x=1395:y=565",
             "drawtext=text='• Multi-agent loop (Taskmaster & Recovery)':fontcolor=#94A3B8:fontsize=11:x=1395:y=595",
             "drawtext=text='• before_tool_callback policy enforcement':fontcolor=#94A3B8:fontsize=11:x=1395:y=620",

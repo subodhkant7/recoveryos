@@ -21,7 +21,7 @@ This guide provides the exact timed 4-minute demonstration script for hackathon 
   > 
   > **Autonomous operations need a recovery control plane.**
   > 
-  > RecoveryOS enforces a strict invariant: **Action Executed ≠ Recovery Verified**. It allows agents to act only within explicit policy boundaries, independently verifies required outcomes, and issues cryptographic Recovery Proof certificates."
+  > RecoveryOS enforces a strict invariant: **Action Executed ≠ Recovery Verified**. It allows agents to act only within explicit policy boundaries, independently verifies required outcomes, and renders an evidence-backed Recovery Proof from durable workflow data."
 
 ---
 
@@ -35,7 +35,7 @@ This guide provides the exact timed 4-minute demonstration script for hackathon 
   5. **`05 RECOVERED`**: All contract outcomes pass (`contract.all_verified() == True`).
 - **Inspect**:
   - Show the **"Why Did You Do That?"** decision trace (Questions 01–04).
-  - Highlight the **Recovery Proof Certificate**:
+  - Highlight the **Evidence-Backed Recovery Proof**:
     - `INCIDENT`: Billing Provider Unavailable
     - `ACTION`: switch_payment_gateway
     - `VERIFICATION`: Billing subscription probe → HTTP 200
@@ -74,6 +74,6 @@ This guide provides the exact timed 4-minute demonstration script for hackathon 
   - Cloud Run (Control Plane API & Console).
   - Cloud Pub/Sub (Event streaming & telemetry).
   - Cloud Firestore (OCC leases & idempotency store).
-  - Gemini 1.5 Pro & Google ADK (Agent reasoning loop).
+  - Gemini 3.5 Flash & Google ADK (Agent reasoning loop).
 - **Close**:
   > "RecoveryOS governs autonomous operations with guardrails, independent verification, and proof."

@@ -31,5 +31,5 @@ def test_package_and_models_import():
 
 def test_config_defaults():
     """Verify configuration defaults are appropriate for hackathon compliance."""
-    assert config.gemini_model in ("gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.7-flash")
+    assert config.gemini_model == "gemini-3.5-flash"
     assert config.port == 8000

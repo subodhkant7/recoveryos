@@ -79,7 +79,7 @@ def test_prod_02_authenticated_iam_probe_reaches_backend(api_client, gcp_identit
     assert data["status"] == "healthy"
     assert data["service"] == "recoveryos"
     assert data["environment"] == "production"
-    assert data["model"] in ("gemini-2.5-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.6-flash")
+    assert data["model"] == "gemini-3.5-flash"
 
 
 def test_prod_03_readiness_probe_verifies_live_firestore(api_client, gcp_identity_token):
@@ -270,4 +270,3 @@ def test_prod_13_cloud_logging_sanitization(jwt_secret):
         assert "Bearer eyJ" not in output, "Raw Authorization Bearer token found in Cloud Run logs!"
     except subprocess.CalledProcessError as e:
         pytest.skip(f"Could not read Cloud Logging: {e}")
-

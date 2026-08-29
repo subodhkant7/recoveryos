@@ -304,8 +304,6 @@ class ResilientGemini(Gemini):
         **kwargs: Any,
     ):
         model_name = model or config.gemini_model
-        if model_name in ("gemini-2.5-flash", "gemini-2.5-flash-preview", "gemini-2.0-flash", "gemini-1.5-flash"):
-            model_name = "gemini-3.5-flash"
         super().__init__(model=model_name, client_kwargs=client_kwargs, **kwargs)
         object.__setattr__(self, "rate_limiter", rate_limiter or global_rate_limiter)
         object.__setattr__(self, "circuit_breaker", circuit_breaker or global_circuit_breaker)
@@ -394,29 +392,6 @@ class ResilientGemini(Gemini):
                         )
                         raise RetryExhaustedError(f"Gemini retries exhausted after {attempt} attempts: {e}") from e
                     raise
-
-                # Automatic model failover on quota / 429 resource exhaustion or model deprecation / 404
-                if ("RESOURCE_EXHAUSTED" in str(e) or "429" in str(e) or "quota" in str(e).lower()
-                    or "404" in str(e) or "no longer available" in str(e).lower() or "NOT_FOUND" in str(e)):
-                    fallback_candidates = [
-                        "gemini-3.6-flash",
-                        "gemini-3.5-flash",
-                        "gemini-3.5-flash-lite",
-                        "gemini-3.1-flash-lite",
-                    ]
-                    current_idx = fallback_candidates.index(self.model) if self.model in fallback_candidates else -1
-                    next_model = fallback_candidates[(current_idx + 1) % len(fallback_candidates)]
-                    if next_model != self.model:
-                        record_resilience_event(
-                            event_type="MODEL_FAILOVER",
-                            action="switch_model",
-                            outcome="SWITCHED",
-                            detail=f"Switching Gemini model from '{self.model}' to '{next_model}' due to model availability / quota limits",
-                            extra={"previous_model": self.model, "new_model": next_model},
-                        )
-                        object.__setattr__(self, "model", next_model)
-                        llm_request.model = next_model
-                        delay = 0.5
 
                 # Calculate exponential backoff with jitter
                 base_backoff = min(self.max_backoff, self.initial_backoff * (2 ** (attempt - 1)))

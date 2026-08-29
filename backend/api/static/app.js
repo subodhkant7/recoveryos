@@ -731,51 +731,60 @@ function showRecoveryProof(snapshot) {
   const cert = document.getElementById('recovery-proof-certificate');
   if (!cert) return;
 
-  // Phase 31 Finding 2: Only render proof for COMPLETED workflows
+  // The proof is a read-only rendering of persisted workflow data. It is not
+  // a signature or a second source of truth.
   const wf = snapshot?.workflow || {};
-  if (wf.state !== 'COMPLETED') return;
-
   const steps = snapshot?.steps || [];
   const approvals = snapshot?.approvals || [];
   const contract = wf.contract || snapshot?.contract || {};
   const outcomes = contract.required_outcomes || [];
-  const scenName = wf.scenario || 'billing_unavailable';
+  const evidence = snapshot?.evidence || [];
+  if (wf.state !== 'COMPLETED') return;
+  const verifiedOutcomes = outcomes.filter((outcome) => (
+    typeof outcome === 'object' && outcome?.verified === true
+  ));
+  const allOutcomesVerified = outcomes.length > 0 && verifiedOutcomes.length === outcomes.length;
+
+  // Do not display a recovery proof for incomplete or internally inconsistent
+  // snapshots, even if a stale client asks to render one.
+  if (!allOutcomesVerified) {
+    cert.classList.add('hidden');
+    return;
+  }
+
+  const actionSteps = steps.filter((step) => (
+    step?.status === 'COMPLETED' && step?.tool_name && step.tool_name !== 'verify_outcome'
+  ));
+  const recoveryAction = actionSteps.at(-1) || {};
+  const verificationEvidence = evidence.filter((item) => item?.evidence_type === 'VERIFICATION');
+  const latestVerification = verificationEvidence.at(-1) || {};
+  const verificationData = latestVerification.data || {};
+  const evidenceIds = verificationEvidence.map((item) => item.evidence_id).filter(Boolean);
+  const incident = snapshot?.failures?.at(-1)?.error_detail
+    || snapshot?.failures?.at(-1)?.error_type
+    || wf.scenario
+    || 'Recorded recovery incident';
+
+  const workflowIdEl = document.getElementById('proof-workflow-id');
+  if (workflowIdEl) workflowIdEl.textContent = wf.workflow_id || '—';
 
   const descEl = document.getElementById('proof-scenario-name');
-  if (descEl) descEl.textContent = wf.name || `${scenName} • Autonomous Recovery`;
+  if (descEl) descEl.textContent = wf.name || 'Verified recovery outcome';
 
   const incEl = document.getElementById('proof-incident-type');
-  if (incEl) {
-    if (scenName === 'billing_unavailable') {
-      incEl.textContent = 'Primary Provider Outage (Stripe HTTP 503)';
-    } else if (scenName === 'contradictory_evidence') {
-      incEl.textContent = 'Plan Tier Discrepancy (Starter vs Enterprise)';
-    } else {
-      incEl.textContent = 'Worker Crash & Interrupted Lease';
-    }
-  }
+  if (incEl) incEl.textContent = incident;
 
   const actionEl = document.getElementById('proof-time-action');
-  if (actionEl) {
-    if (scenName === 'billing_unavailable') {
-      actionEl.textContent = 'setup_billing (paypal failover)';
-    } else if (scenName === 'contradictory_evidence') {
-      actionEl.textContent = 'human_approval & plan reconciliation';
-    } else {
-      actionEl.textContent = 'reconcile_external_state & resume';
-    }
-  }
+  if (actionEl) actionEl.textContent = recoveryAction.tool_name || 'No recorded action';
+
+  const actionResult = document.getElementById('proof-action-result');
+  if (actionResult) actionResult.textContent = recoveryAction.result?.status || 'RECORDED';
 
   const verifyText = document.getElementById('proof-verification-text');
-  if (verifyText) {
-    if (scenName === 'billing_unavailable') {
-      verifyText.textContent = 'Active PayPal Subscription Probe → HTTP 200';
-    } else if (scenName === 'contradictory_evidence') {
-      verifyText.textContent = 'Human Decision Confirmed → Enterprise Verified';
-    } else {
-      verifyText.textContent = 'Idempotent State Probe → Deduplicated & Verified';
-    }
-  }
+  if (verifyText) verifyText.textContent = verificationData.method || 'Independent verification recorded';
+
+  const evidenceEl = document.getElementById('proof-evidence-ids');
+  if (evidenceEl) evidenceEl.textContent = evidenceIds.length ? evidenceIds.join(', ') : '—';
 
   const interEl = document.getElementById('proof-intervention');
   if (interEl) {
@@ -783,22 +792,29 @@ function showRecoveryProof(snapshot) {
     interEl.textContent = humanDecisions > 0 ? `${humanDecisions} (HUMAN AUTHORIZED)` : '0 (AUTONOMOUS)';
   }
 
+  const timestampEl = document.getElementById('proof-timestamp');
+  if (timestampEl) timestampEl.textContent = formatCanonicalDateTime(wf.completed_at || wf.updated_at);
+
   const mttrEl = document.getElementById('proof-mttr');
   if (mttrEl) {
     mttrEl.textContent = calculateWorkflowDuration(wf.created_at, wf.completed_at || wf.updated_at);
   }
 
   const statusEl = document.getElementById('proof-contract-status');
-  if (statusEl) {
-    const evSet = new Set((snapshot?.evidence || []).map((e) => e.outcome_id));
-    const verifiedCount = outcomes.filter((o) => o.verified || evSet.has(o.outcome_id || o)).length || outcomes.length || 6;
-    const totalCount = outcomes.length || 6;
-    statusEl.textContent = `✓ FULFILLED (${verifiedCount}/${totalCount} Verified)`;
+  if (statusEl) statusEl.textContent = `✓ FULFILLED (${verifiedOutcomes.length}/${outcomes.length} VERIFIED)`;
+
+  const finalState = document.getElementById('proof-final-state');
+  if (finalState) finalState.textContent = 'RECOVERED • VERIFIED';
+
+  const decisionText = document.getElementById('proof-decision-text');
+  if (decisionText) {
+    decisionText.textContent = `Action result: ${recoveryAction.result?.status || 'recorded'} → independent verification evidence: ${evidenceIds.length} record(s) → ${verifiedOutcomes.length}/${outcomes.length} outcomes verified → RECOVERED • VERIFIED.`;
   }
 
   cert.classList.remove('hidden');
 
-  // Also append an authoritative certificate line into the live terminal feed at the end
+  // Add a read-only evidence summary to the terminal without claiming a
+  // cryptographic certificate was issued.
   const termContainer = document.getElementById('terminal-feed-container');
   const proofId = `term-proof-${wf.workflow_id || 'active'}`;
   if (termContainer && !document.getElementById(proofId)) {
@@ -807,12 +823,12 @@ function showRecoveryProof(snapshot) {
     termProof.className = 'terminal-proof-line';
     termProof.style.cssText = 'border: 1px solid var(--emerald-core); background: rgba(16, 185, 129, 0.08); padding: 8px 10px; margin: 8px 0; border-radius: 4px; font-family: var(--font-mono);';
     termProof.innerHTML = `
-      <div style="color: var(--emerald-core); font-weight: 800; font-size: 11px; margin-bottom: 4px;">🛡️ RECOVERY PROOF CERTIFICATE VERIFIED &amp; ISSUED</div>
+      <div style="color: var(--emerald-core); font-weight: 800; font-size: 11px; margin-bottom: 4px;">🛡️ EVIDENCE-BACKED RECOVERY PROOF</div>
       <div style="color: #ddd; font-size: 10px; line-height: 1.4;">
-        • <strong style="color: #fff;">INCIDENT:</strong> ${incEl?.textContent || 'Billing Provider Outage'}<br>
-        • <strong style="color: #fff;">ACTION:</strong> ${actionEl?.textContent || 'setup_billing (paypal failover)'}<br>
-        • <strong style="color: #fff;">VERIFICATION:</strong> <span style="color: var(--emerald-core);">${verifyText?.textContent || 'Active Subscription Probe → HTTP 200'}</span><br>
-        • <strong style="color: #fff;">CONTRACT STATUS:</strong> <span style="color: var(--emerald-core);">${statusEl?.textContent || '✓ FULFILLED'}</span>
+        • <strong style="color: #fff;">WORKFLOW:</strong> ${escapeHtml(wf.workflow_id || 'active')}<br>
+        • <strong style="color: #fff;">ACTION:</strong> ${escapeHtml(actionEl?.textContent || 'recorded')} → ${escapeHtml(actionResult?.textContent || 'RECORDED')}<br>
+        • <strong style="color: #fff;">VERIFICATION:</strong> <span style="color: var(--emerald-core);">${escapeHtml(verifyText?.textContent || 'recorded')}</span><br>
+        • <strong style="color: #fff;">CONTRACT STATUS:</strong> <span style="color: var(--emerald-core);">${escapeHtml(statusEl?.textContent || '✓ FULFILLED')}</span>
       </div>
     `;
     termContainer.appendChild(termProof);
@@ -1021,7 +1037,7 @@ function updateAutonomyDecisionCard(scenario, wfState) {
       if (badge) { badge.textContent = 'AUTONOMY BOUNDARY REACHED'; badge.className = 'decision-badge escalated'; }
     }
   } else if (scenario === 'worker_interruption') {
-    if (statement) statement.textContent = '✓ RESILIENT RECONCILIATION • Lease expired • State reconciled before safe idempotent resume';
+    if (statement) statement.textContent = '✓ RESILIENT RECONCILIATION • External write interrupted before local persistence • State reconciled before safe idempotent resume';
     if (badge) {
       badge.textContent = 'OCC LEASE RECONCILED';
       badge.className = 'decision-badge pass';
@@ -1051,9 +1067,9 @@ function updateFourQuestionsInspector(snapshot) {
     if (thinkBox) thinkBox.textContent = 'Autonomous action blocked by policy constraint. Human operator authorization required before proceeding.';
     if (doBox) doBox.innerHTML = '<code>request_human_approval(scope="risk_override")</code>';
   } else if (wf.scenario === 'worker_interruption') {
-    if (narrative) narrative.textContent = `"I detected a worker crash mid-operation. The OCC lease expired, state was safely reconciled against external services, and execution resumed idempotently."`;
-    if (seeBox) seeBox.textContent = 'Worker heartbeat ceased. Operation claim lease expired after 60s.';
-    if (thinkBox) thinkBox.textContent = 'Worker container interrupted. Reconcile external state and resume safely without double billing.';
+    if (narrative) narrative.textContent = `"I simulated an interruption after the billing provider accepted a write but before local completion persisted. I reconciled external state and resumed idempotently."`;
+    if (seeBox) seeBox.textContent = 'The billing provider accepted the idempotent write, but the worker interrupted before local completion persisted.';
+    if (thinkBox) thinkBox.textContent = 'Reconcile the authoritative billing record before retrying so a resumed worker cannot create a duplicate subscription.';
     if (doBox) doBox.innerHTML = '<code>reconcile_and_resume_execution()</code>';
   }
 

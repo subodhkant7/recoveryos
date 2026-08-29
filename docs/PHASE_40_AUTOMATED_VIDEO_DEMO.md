@@ -37,7 +37,7 @@ The entire video recording and compilation process is **100% automated, determin
 
 2. **Deterministic Rendering Engine (`scripts/record_judge_demo.py`)**:
    - Generates pixel-accurate 1080p frames representing the real RecoveryOS Command Center UI.
-   - Applies live HUD ribbons, Google Cloud badges, 5-stage orchestration state graphs, scenario decision traces, and proof certificates.
+   - Applies live HUD ribbons, Google Cloud badges, 5-stage orchestration state graphs, scenario decision traces, and evidence-backed recovery proofs.
    - Encodes exact-duration H.264 video segments at 30 FPS.
    - Concatenates the segments seamlessly into `artifacts/recoveryos_judge_demo_silent.mp4`.
 
@@ -50,9 +50,9 @@ The entire video recording and compilation process is **100% automated, determin
 | **01** | `0:00 – 0:18` | 18s | **Command Center Overview & Core Thesis:** Hero ribbon HUD, live Google Cloud stack (`Cloud Run`, `Pub/Sub`, `Firestore OCC`, `Gemini ADK`), and core invariant: *Action Executed ≠ Recovery Verified*. |
 | **02** | `0:18 – 0:32` | 14s | **5-Stage Control Loop Flow:** Visual walk of `01 DETECT` → `02 REASON` → `03 ACT` → `04 VERIFY` → `05 RECOVERED`. |
 | **03** | `0:32 – 1:24` | 52s | **Hero Scenario 01 (Billing Provider Outage):** Stripe HTTP 500 alert, Gemini reasoning, policy check (`PASS`), autonomous tool execution (`switch_payment_gateway`), and engagement of the verification gate. |
-| **04** | `1:24 – 1:42` | 18s | **Recovery Proof Certificate & Independent Probe:** Verified recovery badge, 0 interventions, MTTR 5.2s, independent subscription probe (HTTP 200), and Invariant Proof bar. |
+| **04** | `1:24 – 1:42` | 18s | **Evidence-Backed Recovery Proof & Independent Probe:** Verified recovery badge, intervention count, authoritative MTTR, verification evidence IDs, and Invariant Proof bar. |
 | **05** | `1:42 – 2:24` | 42s | **Scenario 02 (Contradictory Evidence & Autonomy Boundary):** Experian (42) vs Equifax (88) conflict, `AUTONOMY BOUNDARY REACHED: HUMAN APPROVAL REQUIRED`, "Why we stopped" card, and operator sign-off button. |
-| **06** | `2:24 – 2:57` | 33s | **Scenario 03 (Worker Interruption & OCC Resilience):** Mid-mutation worker kill, 60s Firestore OCC lease expiry, state reconciliation against ground truth, evidence badges (`NO DUPLICATE EXECUTION`, `NO STATE CORRUPTION`, `NO DOUBLE BILLING`), and Decision Replay Engine. |
+| **06** | `2:24 – 2:57` | 33s | **Scenario 03 (Worker Interruption & OCC Resilience):** Deterministic post-write/pre-persistence interruption, state reconciliation against ground truth, evidence-gated resilience badges, and Decision Replay Engine. |
 | **07** | `2:57 – 3:21` | 24s | **Google Cloud Architecture & Code Tour:** Architecture blueprint highlighting `Cloud Run` (`backend/api/server.py`), `Cloud Pub/Sub` (`backend/events/publisher.py`), `Firestore` (`backend/persistence/workflow_store.py`), and `Gemini ADK` (`backend/agents/agent_factory.py`). |
 | **08** | `3:21 – 3:48` | 27s | **Final Thesis & Stable Hold Frame:** Final core takeaway: *Govern. Recover. Verify. Prove.* |
 

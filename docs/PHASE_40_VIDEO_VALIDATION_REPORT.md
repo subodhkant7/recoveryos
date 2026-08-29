@@ -10,7 +10,7 @@
 
 | # | Validation Item | Requirement | Observed Metric / Evidence | Status |
 |---|---|---|---|:---:|
-| 1 | `REAL_APPLICATION_CAPTURED` | Captures authentic RecoveryOS UI & architecture | Exact Command Center layout, 5-stage orchestration graph, decision inspector, proof certificates | **PASS** |
+| 1 | `REAL_APPLICATION_CAPTURED` | Captures authentic RecoveryOS UI & architecture | Exact Command Center layout, 5-stage orchestration graph, decision inspector, evidence-backed recovery proof | **PASS** |
 | 2 | `DETERMINISTIC_RECORDING` | Automated, reproducible pipeline script | `scripts/record_judge_demo.sh` runs autonomously with 0 human input | **PASS** |
 | 3 | `BILLING_RECOVERY_VISIBLE` | Hero Scenario 01 demonstrated | Primary Stripe 500 failure → Gemini reasoning → Adyen failover captured at `0:32–1:24` | **PASS** |
 | 4 | `INDEPENDENT_VERIFICATION_VISIBLE` | Explicit distinction between execution and verification | `VERIFY` stage active probe (HTTP 200) + Invariant Proof bar shown at `1:24–1:42` | **PASS** |
@@ -53,7 +53,7 @@ Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'artifacts/recoveryos_judge_demo_silent.
 | `00:00 – 00:18` (18s) | 01. Overview | Command Center Home | `AUTONOMOUS OPERATIONS NEED A RECOVERY CONTROL PLANE`, Google Cloud Stack ribbons, Live Execution badge |
 | `00:18 – 00:32` (14s) | 02. Control Loop | 5-Stage Orchestration Graph | Active lifecycle flow: `01 DETECT` → `02 REASON` → `03 ACT` → `04 VERIFY` → `05 RECOVERED` |
 | `00:32 – 01:24` (52s) | 03. Scenario 01 | Billing Outage Failover | Stripe 500 Alert → Policy High Confidence → `switch_payment_gateway(adyen)` → `VERIFYING` probe |
-| `01:24 – 01:42` (18s) | 04. Recovery Proof | Proof Certificate | `✓ VERIFIED RECOVERY` badge, MTTR 5.2s, 0 Interventions, `INVARIANT PROOF` bar |
+| `01:24 – 01:42` (18s) | 04. Recovery Proof | Evidence-backed proof | `✓ VERIFIED RECOVERY` badge, authoritative MTTR, intervention count, verification evidence, `INVARIANT PROOF` bar |
 | `01:42 – 02:24` (42s) | 05. Scenario 02 | Contradictory Evidence | Experian (42) vs Equifax (88) conflict, `AUTONOMY BOUNDARY REACHED`, `✓ AUTHORIZE RECOVERY ACTION` |
 | `02:24 – 02:57` (33s) | 06. Scenario 03 | Worker Interruption | OCC 60s lease timeout, `NO DUPLICATE EXECUTION`, `NO STATE CORRUPTION`, Decision Replay Engine |
 | `02:57 – 03:21` (24s) | 07. GCP Architecture | Architecture Blueprint | Cloud Run, Pub/Sub, Firestore OCC, Gemini ADK, source code invariant citations |

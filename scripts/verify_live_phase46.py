@@ -3,7 +3,7 @@ Live Acceptance Verification for Phase 46:
 - Trigger Scenario: billing_unavailable on live Cloud Run
 - Follow execution until COMPLETED
 - Check all timestamps for ISO-8601 UTC date+time format
-- Check required outcomes and Recovery Proof Certificate
+- Check required outcomes and Evidence-Backed Recovery Proof
 """
 
 import asyncio
@@ -94,7 +94,7 @@ async def verify_live_execution():
             assert occ is not None, f"Event {idx} missing timestamp"
             print(f"   [{idx:02d}] [{occ}] {ev.get('actor', 'SYS')}: {ev.get('title')} ({ev.get('event_type')})")
 
-        print("\n6. Checking Recovery Proof Certificate & Evidence:")
+        print("\n6. Checking Evidence-Backed Recovery Proof & Evidence:")
         proof = snapshot.get("recovery_proof")
         print(f"   • Proof Generated: {proof is not None}")
         if proof:

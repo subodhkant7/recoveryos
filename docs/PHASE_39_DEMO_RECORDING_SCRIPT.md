@@ -49,7 +49,7 @@
   `01 DETECT` → `02 REASON` → `03 ACT` → `04 VERIFY` → `05 RECOVERED`.
 - **Narration**:
   > "Rather than static playbooks, RecoveryOS executes a 5-stage deterministic lifecycle:
-  > Signal detection, agentic reasoning with Gemini and ADK, policy-bounded action, an independent outcome verification probe, and a cryptographically bound Recovery Proof Certificate.
+  > Signal detection, agentic reasoning with Gemini 3.5 Flash and ADK, policy-bounded action, an independent outcome verification probe, and an evidence-backed Recovery Proof.
   > 
   > Let's see this in action."
 
@@ -77,7 +77,7 @@
 ---
 
 ### [1:30 – 1:50] 4. Recovery Proof & Independent Verification Probe
-- **Visual Focus**: Zoom/scroll to the emerald **Recovery Proof Certificate** (`#recovery-proof-certificate`) and **Decision Inspector** (`#panel-inspector`).
+- **Visual Focus**: Zoom/scroll to the emerald **Evidence-Backed Recovery Proof** (`#recovery-proof-certificate`) and **Decision Inspector** (`#panel-inspector`).
 - **Inspect Key Elements**:
   - `ACTION`: `switch_payment_gateway`
   - `VERIFICATION`: `Billing subscription probe → HTTP 200`
@@ -86,7 +86,7 @@
 - **Narration**:
   > "Here is the core invariant. The agent executed `switch_payment_gateway`, but RecoveryOS dispatched an independent subscription verification probe directly to the gateway.
   > 
-  > Only after that probe returned HTTP 200 did RecoveryOS issue this Recovery Proof Certificate.
+  > Only after the independent probe satisfied every required outcome did RecoveryOS render this evidence-backed Recovery Proof.
   > 
   > Over in the Decision Trace, we answer the four audit questions: What did you see, what did you think, what did you do, and how do you know it worked."
 
@@ -118,7 +118,7 @@
 - **Modal Action**: Select radio `Worker Interruption`.
 - **Exact UI Click**: Click `[⚡ TEST RESILIENCE]`.
 - **Visual State Progression**:
-  1. Worker container terminates mid-flight during customer provisioning.
+  1. A deterministic interruption occurs after the provider accepts a billing write but before local completion persists.
   2. OCC lease timeout expires (60s).
   3. Replacement worker claims lease, reconciles external state against ground truth, and resumes idempotently.
   4. Resilient badges upgrade to: `✓ NO DUPLICATE EXECUTION`, `✓ NO STATE CORRUPTION`, `✓ NO DOUBLE BILLING`.
@@ -131,14 +131,14 @@
 
 ### [3:10 – 3:35] 7. Google Cloud Architecture & Code Tour
 - **Visual Focus**: Hero ribbon Google Cloud stack badges:
-  `☁️ Cloud Run API • 📨 Cloud Pub/Sub Events • ⚡ Cloud Firestore OCC • 🤖 Gemini 1.5 Pro ADK`.
+  `☁️ Cloud Run API • 📨 Cloud Pub/Sub Events • ⚡ Cloud Firestore OCC • 🤖 Gemini 3.5 Flash ADK`.
 - **Code Pointers (Cut to README or IDE momentarily)**:
   - `backend/models/workflow.py`: `VALID_TRANSITIONS` forbids `EXECUTING → COMPLETED`.
   - `backend/engine/policy_engine.py`: Deterministic autonomy boundary.
   - `backend/engine/agent_runner.py`: Independent outcome verification gate.
 - **Narration**:
   > "RecoveryOS is built natively on Google Cloud:
-  > Cloud Run hosts our async FastAPI control plane, Cloud Pub/Sub handles distributed telemetry and worker dispatch, Cloud Firestore maintains distributed OCC leases and audit trails, and Google ADK orchestrates Gemini 1.5 Pro reasoning loops.
+  > Cloud Run hosts our async FastAPI control plane, Cloud Pub/Sub handles distributed telemetry and worker dispatch, Cloud Firestore maintains distributed OCC leases and audit trails, and Google ADK orchestrates Gemini 3.5 Flash reasoning loops.
   > 
   > Every claim is backed by 377 automated regression tests and 30 targeted adversarial attack tests."
 

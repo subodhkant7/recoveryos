@@ -3,22 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>RecoveryOS — Recovery-First Control Plane for Autonomous Operations</title>
-  <meta name="description" content="RecoveryOS is a recovery-first control plane for autonomous operations. Govern agent actions with explicit autonomy boundaries and independently verify recovery before declaring success.">
-  <meta name="keywords" content="recovery-first control plane, autonomous operations, autonomous recovery, recovery automation, bounded autonomy, verified recovery, autonomous incident recovery, recovery orchestration, outcome verification, recovery proof">
+  <title>RecoveryOS — Recovery Control Plane for Enterprise Agent Fleets</title>
+  <meta name="description" content="RecoveryOS is the recovery control plane for enterprise agent fleets. It governs agent actions with explicit autonomy boundaries and independently verifies recovery before declaring success.">
+  <meta name="keywords" content="enterprise agent fleets, recovery control plane, autonomous recovery, recovery automation, bounded autonomy, verified recovery, autonomous incident recovery, recovery orchestration, outcome verification, recovery proof">
   <meta name="application-name" content="RecoveryOS — Operator Control Plane">
   <link rel="canonical" href="https://recoveryos-321161003794.asia-east1.run.app/">
 
   <!-- Open Graph / Social Sharing -->
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://recoveryos-321161003794.asia-east1.run.app/">
-  <meta property="og:title" content="RecoveryOS — Recovery-First Control Plane for Autonomous Operations">
+  <meta property="og:title" content="RecoveryOS — Recovery Control Plane for Enterprise Agent Fleets">
   <meta property="og:description" content="Autonomous recovery with explicit autonomy boundaries, independent verification, and recovery proof.">
   <meta property="og:site_name" content="RecoveryOS — Operator Control Plane">
 
   <!-- Twitter / X Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="RecoveryOS — Recovery-First Control Plane for Autonomous Operations">
+  <meta name="twitter:title" content="RecoveryOS — Recovery Control Plane for Enterprise Agent Fleets">
   <meta name="twitter:description" content="Autonomous recovery with explicit autonomy boundaries, independent verification, and recovery proof.">
 
   <!-- JSON-LD Structured Data -->
@@ -56,7 +56,7 @@
           </div>
           <div class="brand-titles">
             <span class="brand-title">RECOVERY<span class="brand-glow">OS</span></span>
-            <span class="brand-sub">RECOVERY-FIRST CONTROL PLANE • AUTONOMOUS OPERATIONS COMMAND CENTER</span>
+            <span class="brand-sub">RECOVERY CONTROL PLANE • ENTERPRISE AGENT FLEETS</span>
           </div>
         </div>
 
@@ -111,10 +111,10 @@
     <!-- Hero Ribbon / Live Autonomous HUD -->
     <section class="hero-ribbon">
       <div class="hero-story-block">
-        <div class="story-eyebrow">RECOVERYOS • RECOVERY-FIRST CONTROL PLANE • ONLINE</div>
+        <div class="story-eyebrow">RECOVERYOS • ENTERPRISE AGENT FLEET RECOVERY CONTROL PLANE • ONLINE</div>
         <div class="story-headline">
-          <span class="story-accent">AUTONOMOUS OPERATIONS NEED A RECOVERY CONTROL PLANE.</span>
-          <span class="story-text">RecoveryOS governs autonomous recovery through explicit policies and autonomy boundaries. It acts when confidence and policy permit, halts when human authorization is required, and declares recovery only after independent verification confirms the outcome.</span>
+          <span class="story-accent">ENTERPRISE AGENT FLEETS NEED A RECOVERY CONTROL PLANE.</span>
+          <span class="story-text">RecoveryOS governs what happens after an agent-driven workflow fails: explicit policies and autonomy boundaries decide whether to act, and independent verification—not an action response—decides whether recovery succeeded.</span>
         </div>
         <div class="hero-kpi-row">
           <div class="kpi-unit">
@@ -223,7 +223,7 @@
           <span class="story-arrow">→</span>
           <div class="story-step" id="narrative-step-5">OUTCOME VERIFIED</div>
           <span class="story-arrow">→</span>
-          <div class="story-step" id="narrative-step-6">RECOVERY PROVED</div>
+          <div class="story-step" id="narrative-step-6">RECOVERED • VERIFIED</div>
         </div>
 
         <!-- Canvas Header & Replay Controls -->
@@ -431,45 +431,65 @@
           </div>
         </div>
 
-        <!-- Final Recovery Proof Certificate (Appears upon verified recovery) -->
+        <!-- Evidence-backed recovery proof (appears only after verified recovery) -->
         <div class="recovery-proof-certificate hidden" id="recovery-proof-certificate">
           <div class="proof-header">
             <span class="proof-badge-icon">🛡️</span>
             <div class="proof-header-titles">
-              <h4 class="proof-title">RECOVERY PROOF</h4>
+              <h4 class="proof-title">EVIDENCE-BACKED RECOVERY PROOF</h4>
               <span class="proof-subtitle" id="proof-scenario-name">Recovery is not a claim. It is a verified outcome.</span>
             </div>
             <span class="proof-stamp">✓ VERIFIED RECOVERY</span>
           </div>
           <div class="proof-grid">
             <div class="proof-item">
+              <span class="p-label">WORKFLOW</span>
+              <span class="p-val mono" id="proof-workflow-id">—</span>
+            </div>
+            <div class="proof-item">
               <span class="p-label">INCIDENT</span>
-              <span class="p-val" id="proof-incident-type">Billing Provider Unavailable</span>
+              <span class="p-val" id="proof-incident-type">—</span>
             </div>
             <div class="proof-item">
               <span class="p-label">ACTION</span>
-              <span class="p-val mono" id="proof-time-action">switch_payment_gateway</span>
+              <span class="p-val mono" id="proof-time-action">—</span>
             </div>
             <div class="proof-item">
-              <span class="p-label">VERIFICATION</span>
-              <span class="p-val mono emerald" id="proof-verification-text">Billing subscription probe → HTTP 200</span>
+              <span class="p-label">ACTION RESULT</span>
+              <span class="p-val mono" id="proof-action-result">—</span>
+            </div>
+            <div class="proof-item">
+              <span class="p-label">INDEPENDENT VERIFICATION</span>
+              <span class="p-val mono emerald" id="proof-verification-text">—</span>
+            </div>
+            <div class="proof-item">
+              <span class="p-label">VERIFICATION EVIDENCE</span>
+              <span class="p-val mono" id="proof-evidence-ids">—</span>
+            </div>
+            <div class="proof-item">
+              <span class="p-label">REQUIRED OUTCOMES</span>
+              <span class="p-val pass" id="proof-contract-status">—</span>
+            </div>
+            <div class="proof-item">
+              <span class="p-label">FINAL LIFECYCLE</span>
+              <span class="p-val pass" id="proof-final-state">RECOVERED • VERIFIED</span>
             </div>
             <div class="proof-item">
               <span class="p-label">OPERATOR INTERVENTION</span>
-              <span class="p-val pass" id="proof-intervention">0</span>
+              <span class="p-val pass" id="proof-intervention">—</span>
             </div>
             <div class="proof-item">
-              <span class="p-label">MTTR</span>
-              <span class="p-val cyan" id="proof-mttr">5.2s</span>
+              <span class="p-label">VERIFIED AT</span>
+              <span class="p-val cyan" id="proof-timestamp">—</span>
             </div>
             <div class="proof-item">
-              <span class="p-label">OUTCOME CONTRACT</span>
-              <span class="p-val pass" id="proof-contract-status">✓ FULFILLED</span>
+              <span class="p-label">TIME TO RECOVER</span>
+              <span class="p-val cyan" id="proof-mttr">—</span>
             </div>
           </div>
           <div class="proof-distinction-bar">
             <span class="distinction-tag">INVARIANT PROOF:</span>
-            <span class="distinction-text">Agent Action Executed ≠ Recovery Proved. Verified via Independent Subscription Probe (HTTP 200) → Contract Satisfied.</span>
+            <span class="distinction-text" id="proof-decision-text">An action result is recorded separately. Recovery is declared only when every required outcome has independent verification evidence.</span>
           </div>
         </div>
 
@@ -499,7 +519,7 @@
         <div class="why-recoveryos-banner">
           <div class="why-core-badge">WHY RECOVERYOS?</div>
           <div class="why-text-wrap">
-            <span>Traditional automation: <code>DETECT → RUN PLAYBOOK</code>. <b>RecoveryOS governs: <code>DETECT → REASON → POLICY → ACT → VERIFY → PROVE</code>.</b> Recovery is declared only after independent verification.</span>
+            <span>Traditional agent automation: <code>DETECT → RUN ACTION</code>. <b>RecoveryOS governs: <code>DETECT → DIAGNOSE → PLAN → POLICY → EXECUTE → VERIFY → RECOVER / ESCALATE</code>.</b> An action response is not a recovered outcome.</span>
           </div>
         </div>
 
@@ -657,9 +677,9 @@
                   <span class="scenario-badge badge-amber">SCENARIO 03 • RESILIENT EXECUTION</span>
                   <span class="scenario-name">Worker Interruption</span>
                 </div>
-                <p class="scenario-desc"><b>Failure:</b> Worker container terminates mid-flight.<br/><b>Agent Behavior:</b> Worker interruption → lease expiry → external-state reconciliation → safe idempotent resume.<br/><b>Human Intervention:</b> None.<br/><b>Strategic Purpose:</b> Demonstrates that the recovery mechanism itself is designed to tolerate execution interruption.</p>
+                <p class="scenario-desc"><b>Failure:</b> A deterministic interruption occurs after the billing provider accepts a write and before local completion persists.<br/><b>Agent Behavior:</b> interruption → authoritative external-state reconciliation → bounded redispatch → independent verification.<br/><b>Human Intervention:</b> None unless recovery budget is exhausted.<br/><b>Strategic Purpose:</b> Demonstrates that recovery itself tolerates the dangerous post-write/pre-persistence boundary without duplicate billing.</p>
                 <div class="scenario-flow">
-                  <span>Worker Killed</span> → <span>OCC Lease Timeout</span> → <span>Idempotent Safe Resume</span>
+                  <span>Write Accepted</span> → <span>Interruption Simulated</span> → <span>Reconcile &amp; Resume</span>
                 </div>
               </div>
             </label>

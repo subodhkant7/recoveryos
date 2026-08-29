@@ -34,8 +34,8 @@ This script is engineered for a live, uninterrupted hackathon presentation showi
   - Point to **`03 ACT`**: Tool execution card fires `switch_payment_gateway(provider="adyen")`.
   - Point to **`04 VERIFY`**: The outcome probe verifies HTTP 200 on subscription creation.
   - Point to **`05 RECOVERED`**: The canvas illuminates green.
-  - Point to the **Recovery Proof Certificate**:
-    > "Notice the certificate: MTTR is calculated from authoritative timestamps. Operator Intervention is 0. The outcome contract is fulfilled only after independent verification."
+  - Point to the **Evidence-Backed Recovery Proof**:
+    > "Notice the proof: MTTR is calculated from authoritative timestamps. The action result is separate from verification evidence. The outcome contract is fulfilled only after independent verification."
 
 ---
 
@@ -64,7 +64,7 @@ This script is engineered for a live, uninterrupted hackathon presentation showi
   2. Select **`SCENARIO 03 • Worker Interruption`**.
   3. Click **`⚡ TEST RESILIENCE`**.
 - **Live Visual Walkthrough**:
-  - The worker container crashes mid-flight.
+  - The demo simulates an interruption after the billing provider accepts a write but before local completion persists.
   - The OCC lease expires.
   - The replacement worker reconciles external state against payment records and resumes idempotently.
   - The **Worker Resilience Card** upgrades its evidence badges:

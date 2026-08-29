@@ -34,7 +34,7 @@ NEW_COMMIT=PENDING_PHASE_39_DOCUMENTATION
 | **1. Problem & Central Thesis** | `0:00 – 0:20` | `0:18` | **PASS** | Sets up `Action Executed ≠ Recovery Verified`. |
 | **2. 5-Stage Control Loop** | `0:20 – 0:35` | `0:14` | **PASS** | Cursor sweeps across `01 DETECT` → `05 RECOVERED`. |
 | **3. Hero Scenario 01** | `0:35 – 1:30` | `0:52` | **PASS** | Autonomous failover to Adyen with live SSE updates. |
-| **4. Recovery Proof & Probe** | `1:30 – 1:50` | `0:18` | **PASS** | Explains independent verification probe & certificate. |
+| **4. Recovery Proof & Probe** | `1:30 – 1:50` | `0:18` | **PASS** | Explains independent verification probe and evidence-backed proof. |
 | **5. Scenario 02: Autonomy Boundary** | `1:50 – 2:35` | `0:42` | **PASS** | Halts at `AWAITING_APPROVAL`, operator authorises. |
 | **6. Scenario 03: Worker Resilience** | `2:35 – 3:10` | `0:33` | **PASS** | OCC lease timeout & idempotent resume without double billing. |
 | **7. Google Cloud Architecture** | `3:10 – 3:35` | `0:24` | **PASS** | Cloud Run, Pub/Sub, Firestore OCC, Gemini ADK loop. |
@@ -59,7 +59,7 @@ NEW_COMMIT=PENDING_PHASE_39_DOCUMENTATION
 | **Cloud Run** | [`backend/api/server.py`](../backend/api/server.py) | Fast asynchronous REST & SSE control plane hosting. |
 | **Cloud Pub/Sub** | [`backend/events/publisher.py`](../backend/events/publisher.py) | Distributed workflow event bus and asynchronous worker dispatch. |
 | **Cloud Firestore** | [`backend/persistence/workflow_store.py`](../backend/persistence/workflow_store.py) | OCC leases (60s) and state snapshot idempotency deduplication. |
-| **Gemini 1.5 Pro & ADK** | [`backend/agents/agent_factory.py`](../backend/agents/agent_factory.py) | Taskmaster and Recovery Specialist reasoning engine. |
+| **Gemini 3.5 Flash & ADK** | [`backend/agents/agent_factory.py`](../backend/agents/agent_factory.py) | Taskmaster and Recovery Specialist reasoning engine. |
 
 ---
 

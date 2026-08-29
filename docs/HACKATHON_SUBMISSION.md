@@ -1,47 +1,63 @@
 # Hackathon Submission: RecoveryOS
 
-## TITLE
+## Title
+
 **RecoveryOS — Governed Autonomous Recovery for Enterprise Agent Fleets**
 
-## ONE-LINE PITCH
-"The autonomous reliability layer that verifies whether recovery actions actually achieved the required business outcome before declaring success."
+## One-line pitch
 
----
+> The reliability layer that verifies whether autonomous agents actually recovered the business outcome.
 
-## PROBLEM
-In standard enterprise automation and AI agent systems, tool execution success is treated as business recovery. If a recovery script or AI agent calls an external API and receives an `HTTP 200 OK`, the platform assumes the problem is resolved—even if silent data corruption, downstream microservice inconsistencies, or race conditions keep the actual business outcome broken.
+## Problem
 
-Our core invariant is: **Action Executed ≠ Recovery Verified**.
+Enterprise agents can execute a tool successfully while the business outcome is still broken. An `HTTP 200` does not prove a subscription is active on the correct plan, that a record is consistent, or that a crash did not duplicate a side effect.
 
----
+## Solution
 
-## SOLUTION
-RecoveryOS is a recovery-first control plane for autonomous operations. It coordinates multi-agent workflows, enforces deterministic safety policies, executes idempotent recovery tools, independently verifies external outcomes via active probes, and escalates to human operators when safety boundaries are reached.
+RecoveryOS detects failures, coordinates a recovery workflow, applies deterministic policy gates, executes bounded idempotent actions, independently verifies required outcomes, records evidence, and escalates when autonomy is insufficient.
 
----
+Its invariant is simple: **Action Executed ≠ Recovery Verified.**
 
-## THE DIFFERENCE
-- **Governed Autonomy**: Autonomy is governed, not assumed. Agents propose plans; the deterministic `PolicyEngine` determines if actions are permitted.
-- **Independent Outcome Verification**: The engine does not trust agent tool return codes. It actively probes the system state to verify actual business outcome reality.
-- **Tamper-Evident Recovery Proof**: Issues a detailed Recovery Proof Certificate containing the decision MTTR, step execution history, and independent verification evidence IDs.
+## Differentiator
 
----
+Gemini may diagnose and propose; deterministic RecoveryOS code enforces policy, state transitions, idempotency, and the independent verification gate. A workflow becomes `RECOVERED • VERIFIED` only when every required outcome in its contract has separate verification evidence.
 
-## TRACK FIT
-**Fortified Enterprise Fleet**: RecoveryOS provides a resilient, fortified reliability layer to govern and coordinate enterprise agent fleets, ensuring liveness, concurrency protection (Optimistic Concurrency Control leases), and zero-trust policy gates.
+The console renders an **Evidence-Backed Recovery Proof** from durable workflow data: workflow ID, incident, action and result, verification method, evidence IDs, outcome count, UTC completion time, final lifecycle, and intervention count. It is not cryptographically signed or presented as tamper-evident.
 
----
+## Fortified Enterprise Fleet fit
 
-## GOOGLE TECHNOLOGIES USED
-- **Gemini 3.5 Flash**: Orchestrates agent reasoning, failure diagnosis, and alternative path planning.
-- **Google ADK (Agent Development Kit)**: Powers multi-agent coordination, function declarations, and prompts.
-- **Google Cloud Run**: Hosts control plane serverless API and Pub/Sub workers.
-- **Google Cloud Firestore**: Persists workflows, leases, claims, and audit logs.
-- **Google Cloud Pub/Sub**: Manages asynchronous telemetry events and execution queues.
+RecoveryOS provides the control and reliability layer an enterprise fleet needs around agent actions:
 
----
+- policy-gated autonomy and human approval boundaries;
+- bounded recovery retries, liveness protection, and escalation;
+- idempotency, operation claims, and optimistic concurrency protection;
+- independent verification that blocks false recovery;
+- auditable event history and read-only historical replay.
 
-## PRIMARY DEMO FLOW
-1. **billing_unavailable**: Stripe HTTP 503 outage detected → Gemini 3.5 Flash diagnoses root cause → Policy permits autonomous switch → PayPal failover executed → Independent subscription probe verifies outcome → State: `RECOVERED • VERIFIED` with Recovery Proof.
-2. **contradictory_evidence**: Conflicting risk scores (42 vs 88) → Autonomy boundary reached → Execution safely halts at `AWAITING APPROVAL` for human authorization.
-3. **worker_interruption**: Worker container crashes mid-flight → OCC lease expires → Replacement worker reconciles state without duplicate execution or double billing.
+## Google technologies used
+
+- **Gemini 3.5 Flash** (`GEMINI_MODEL`) for recovery reasoning.
+- **Google ADK** for agents, delegated tools, sessions, and runner execution.
+- **Cloud Run** for the API and worker deployment runtime.
+- **Cloud Firestore** for durable workflow state, evidence, audit history, idempotency records, and operation claims.
+- **Cloud Pub/Sub** for asynchronous workflow dispatch and worker consumption.
+
+RecoveryOS does not claim Gemini Enterprise Agent Platform (GEAP) services. Its governance, policy, state machine, verification, evidence proof, retries, and replay are RecoveryOS-native.
+
+## Demo flow
+
+1. **Billing provider outage** — A simulated primary provider returns `HTTP 503`; an ADK/Gemini agent diagnoses, policy permits an idempotent failover, and an independent billing query verifies the required plan and billing cycle before `RECOVERED • VERIFIED`.
+2. **Contradictory evidence** — The billing action reports success but returns the wrong plan tier. Independent verification fails, so RecoveryOS cannot declare recovery and stops at `AWAITING APPROVAL`.
+3. **Worker interruption** — A deterministic post-write/pre-persistence interruption is reconciled against external state, then redispatched within the recovery budget without duplicate billing.
+
+## Judge path
+
+Open the [production command center](https://recoveryos-321161003794.asia-east1.run.app/), run **Billing provider outage**, then inspect the lifecycle, policy decision, action result, verification evidence, and Evidence-Backed Recovery Proof. Run **Contradictory evidence** next to see the safety boundary rather than a false success.
+
+## Code evidence
+
+- Runtime model and ADK agent construction: [`backend/config.py`](../backend/config.py), [`backend/agents/agent_factory.py`](../backend/agents/agent_factory.py)
+- Independent verification completion gate: [`backend/engine/agent_runner.py`](../backend/engine/agent_runner.py), [`backend/tools/onboarding/tools.py`](../backend/tools/onboarding/tools.py)
+- Policy enforcement: [`backend/engine/policy_engine.py`](../backend/engine/policy_engine.py)
+- Durable state and claims: [`backend/persistence/workflow_store.py`](../backend/persistence/workflow_store.py)
+- Pub/Sub worker dispatch: [`backend/events/publisher.py`](../backend/events/publisher.py), [`backend/events/consumer.py`](../backend/events/consumer.py)

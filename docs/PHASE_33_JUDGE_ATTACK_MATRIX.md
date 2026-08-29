@@ -49,14 +49,14 @@ This document provides rigorous, implementation-backed answers to the 10 most cr
 ---
 
 ### Q7: "Can you show me that recovery actually completed?"
-**Answer**: **Yes.** The **Recovery Proof Certificate** appears dynamically on the console canvas. It renders:
+**Answer**: **Yes.** The **Evidence-Backed Recovery Proof** appears dynamically on the console canvas. It renders:
 - **Incident Type**: The failure diagnosed.
 - **Action Taken**: The sanitized recovery tool executed.
 - **Verification Evidence**: The live verification probe result (e.g., `HTTP 200`).
 - **Operator Interventions**: Derived directly from the `snapshot.approvals` record.
 - **MTTR**: Dynamically calculated from authoritative timestamps (`wf.created_at` → `wf.completed_at`).
 - **Outcome Contract**: `✓ FULFILLED`.
-The certificate is guarded and will **never** render for uncompleted, failed, or active workflows.
+The proof is guarded and will **never** render for uncompleted, failed, active, or internally inconsistent workflows.
 
 ---
 

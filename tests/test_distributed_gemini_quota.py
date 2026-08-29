@@ -249,7 +249,7 @@ async def test_11_resilient_gemini_uses_distributed_limiter():
     """ResilientGemini integrates seamlessly with distributed quota limiter."""
     dist_limiter = InMemoryDistributedQuotaLimiter(min_interval_seconds=0.1)
     cb = GeminiCircuitBreaker(failure_threshold=3, cooldown_seconds=1.0)
-    gemini = ResilientGemini(model="gemini-2.5-flash", rate_limiter=dist_limiter, circuit_breaker=cb)
+    gemini = ResilientGemini(model="gemini-3.5-flash", rate_limiter=dist_limiter, circuit_breaker=cb)
 
     assert gemini.rate_limiter == dist_limiter
     assert gemini.circuit_breaker == cb
@@ -263,7 +263,7 @@ async def test_12_circuit_breaker_blocks_before_quota_acquisition():
     await cb.record_failure()
     assert cb.state == CircuitState.OPEN
 
-    gemini = ResilientGemini(model="gemini-2.5-flash", rate_limiter=dist_limiter, circuit_breaker=cb)
+    gemini = ResilientGemini(model="gemini-3.5-flash", rate_limiter=dist_limiter, circuit_breaker=cb)
 
     with pytest.raises(CircuitOpenError):
         async for _ in gemini.generate_content_async(None):

@@ -12,7 +12,7 @@
 | **Cloud Run API Service** | `recoveryos` | `revision recoveryos-00022-nt7` (100% traffic) | **SERVING** |
 | **Cloud Run Worker Service** | `recoveryos-worker` | `revision recoveryos-worker-00017-9pt` (100% traffic) | **SERVING** |
 | **Unauthenticated Judge Access** | `--allow-unauthenticated` | Active (No Google IAM login required) | **VERIFIED** |
-| **Live Health Check (`/api/health`)** | HTTP 200 `healthy` | `{"status":"healthy","service":"recoveryos","environment":"production","model":"gemini-3.5-flash-lite"}` | **PASSED** |
+| **Live Health Check (`/api/health`)** | HTTP 200 `healthy` | `{"status":"healthy","service":"recoveryos","environment":"production","model":"gemini-3.5-flash"}` | **PASSED** |
 | **Live Scenario 1 (Billing Outage)** | Autonomous Recovery | **COMPLETED** (12 steps, 53 audit events) | **PASSED** |
 | **Live Scenario 2 (Contradictory)** | Governed Verification | **COMPLETED** (12 steps, 41 audit events) | **PASSED** |
 | **Live Scenario 3 (Interruption)** | OCC Lease Reconciliation | **COMPLETED** (12 steps, 53 audit events) | **PASSED** |
@@ -30,7 +30,7 @@ graph TD
     APIServer -->|Durable State & Snapshots| Firestore["Google Cloud Firestore<br/>(recoveryosdb)"]
     APIServer -->|Async Execution Message| PubSub["Google Cloud Pub/Sub<br/>(recoveryos-workflow-execution)"]
     PubSub -->|Push Subscription Envelope| WorkerService["Cloud Run: recoveryos-worker<br/>(Asynchronous Execution Engine)"]
-    WorkerService -->|Live Generative Intelligence| Gemini["Google Gemini 3.5 Flash-Lite / 3.5 Flash<br/>(with Automatic Multi-Model Quota Failover)"]
+    WorkerService -->|Live Generative Intelligence| Gemini["Google Gemini 3.5 Flash"]
     WorkerService -->|Independent Verification| Tools["Deterministic Tool Engine & External Services"]
     WorkerService -->|OCC Leases & Audit Events| Firestore
     APIServer -->|Single-Use SSE Streaming| Judge
@@ -56,7 +56,7 @@ graph TD
 * **Operational Behavior**:
   1. Executes customer onboarding steps under deterministic policy engine enforcement.
   2. Independent verifier audits all six contract outcomes (`identity_verified`, `documents_validated`, `risk_assessed`, `billing_configured`, `account_activated`, `welcome_sent`).
-  3. Cryptographically seals verification references in the immutable audit trail.
+  3. Persists verification evidence and audit events; the recovery proof is evidence-backed, not cryptographically signed or tamper-evident.
 * **Live Outcome**: **`COMPLETED`** (41 structured audit events recorded in Firestore).
 
 ### Scenario 3: Worker Interruption & OCC Reconciliation (`worker_interruption`)

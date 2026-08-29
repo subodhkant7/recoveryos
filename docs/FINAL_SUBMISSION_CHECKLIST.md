@@ -27,7 +27,7 @@ This checklist certifies all product, autonomy, resilience, UI, security, and te
 - [x] **5-Stage Dominant Graph**: Active stage highlighted; previous verified; future waiting.
 - [x] **"Why Did You Do That?" Decision Inspector**: Answers *What did you see?*, *What did you think?*, *What did you do?*, and *How do you know it worked?*.
 - [x] **Autonomy Decision Card**: Dynamically shows `AUTONOMOUS ACTION PERMITTED`, `AUTONOMY BOUNDARY REACHED`, or `OPERATOR AUTHORIZED`.
-- [x] **Recovery Proof Certificate**: Only displays for legitimately completed workflows.
+- [x] **Evidence-Backed Recovery Proof**: Only displays for legitimately completed workflows with verified outcomes.
 - [x] **Live / Replay Separation**: Distinct badges for `● LIVE EXECUTION` vs `↺ DECISION REPLAY • READ-ONLY`.
 - [x] **Demo Mode Presentation**: Fullscreen-ready layout with responsive left sidebar collapse.
 

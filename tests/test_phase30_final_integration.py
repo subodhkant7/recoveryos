@@ -40,7 +40,7 @@ async def test_p30_01_root_and_console_routes():
         resp = await client.get("/")
         assert resp.status_code == 200
         assert "RECOVERY<span class=\"brand-glow\">OS</span>" in resp.text
-        assert "AUTONOMOUS OPERATIONS COMMAND CENTER" in resp.text
+        assert "RECOVERY CONTROL PLANE • ENTERPRISE AGENT FLEETS" in resp.text
         assert "DEMO MODE • LIVE BACKEND" in resp.text
         assert "ACTION EXECUTED ≠ RECOVERY VERIFIED" in resp.text
         assert "RECOVERY PROOF" in resp.text

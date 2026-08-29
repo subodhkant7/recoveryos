@@ -22,7 +22,7 @@
 * **Visual on Screen:** 5-Stage agentic lifecycle cards (`DETECT` → `REASON` → `ACT` → `VERIFY` → `RECOVERED`).
 * **Founder Voiceover:**
   > *"Every recovery follows a deterministic 5-stage control loop:*  
-  > *Detect signals via Pub/Sub, reason about root causes with Gemini 1.5 Pro, execute bounded idempotent tools with OCC leases, independently verify outcomes against ground truth, and issue an auditable Recovery Proof Certificate."*
+  > *Detect signals via Pub/Sub, reason about root causes with Gemini 3.5 Flash, execute bounded idempotent tools with OCC leases, independently verify outcomes against ground truth, and render an evidence-backed Recovery Proof."*
 
 ---
 
@@ -31,7 +31,7 @@
 * **Founder Voiceover:**
   > *"Let's see Scenario 1 in action: a live billing provider outage.*  
   > *Our primary payment gateway, Stripe, begins failing with consecutive HTTP 500 timeouts.*  
-  > *The Taskmaster agent ingests the error stream and invokes Gemini 1.5 Pro.*  
+  > *The Taskmaster agent ingests the error stream and invokes Gemini 3.5 Flash.*
   > *Gemini diagnoses the degraded gateway and verifies that the secondary provider, Adyen, is healthy.*  
   > *Before executing, our deterministic Policy Engine evaluates the action. Policy confirms confidence is high, zero constraints are violated, and autonomous failover is permitted.*  
   > *The recovery agent claims an OCC lease and executes the gateway switch tool.*  
@@ -39,10 +39,10 @@
 
 ---
 
-### Segment 4: Recovery Proof Certificate & Independent Verification (`01:24 – 01:42` • 18s)
-* **Visual on Screen:** Emerald Recovery Proof Certificate, 0 interventions, MTTR 5.2s, Invariant Proof Bar, 4-Questions Decision Trace.
+### Segment 4: Recovery Proof & Independent Verification (`01:24 – 01:42` • 18s)
+* **Visual on Screen:** Emerald Evidence-Backed Recovery Proof, intervention count, authoritative MTTR, verification evidence IDs, Invariant Proof Bar, 4-Questions Decision Trace.
 * **Founder Voiceover:**
-  > *"Once the verification probe returns HTTP 200, RecoveryOS issues a Recovery Proof Certificate.*  
+  > *"Once independent verification satisfies every required outcome, RecoveryOS renders the Evidence-Backed Recovery Proof.*
   > *Mean Time to Recover was 5.2 seconds with zero human interventions.*  
   > *Judges can inspect the 4 core audit questions in the Decision Trace: What did you see? What did you think? What did you do? And how do you know it worked?"*
 
@@ -59,7 +59,7 @@
 ---
 
 ### Segment 6: Scenario 03 — Worker Interruption & OCC Resilience (`02:24 – 02:57` • 33s)
-* **Visual on Screen:** Worker crash alert, 60s lease expiry, state reconciliation badges (`NO DUPLICATE EXECUTION`, `NO DOUBLE BILLING`), Decision Replay Engine.
+* **Visual on Screen:** Post-write/pre-persistence interruption alert, authoritative-state reconciliation badges (`NO DUPLICATE EXECUTION`, `NO DOUBLE BILLING`), Decision Replay Engine.
 * **Founder Voiceover:**
   > *"Recovery systems must survive failure themselves. In Scenario 3, a worker process is terminated mid-flight.*  
   > *Using Cloud Firestore Optimistic Concurrency Control, the 60-second execution lease expires.*  
@@ -69,13 +69,13 @@
 ---
 
 ### Segment 7: Google Cloud Architecture & Code Tour (`02:57 – 03:21` • 24s)
-* **Visual on Screen:** Architecture Blueprint (Cloud Run, Pub/Sub, Firestore OCC, Gemini 1.5 Pro ADK) and verified codebase invariants.
+* **Visual on Screen:** Architecture Blueprint (Cloud Run, Pub/Sub, Firestore OCC, Gemini 3.5 Flash ADK) and verified codebase invariants.
 * **Founder Voiceover:**
   > *"RecoveryOS is built natively on Google Cloud:*  
   > *Cloud Run powers our async control plane and single-use SSE ticket stream.*  
   > *Cloud Pub/Sub handles decoupled event distribution.*  
   > *Cloud Firestore provides distributed OCC leases and idempotency deduplication.*  
-  > *And Gemini 1.5 Pro with the Google Agent Development Kit provides bounded reasoning.*  
+  > *And Gemini 3.5 Flash with the Google Agent Development Kit provides bounded reasoning.*
   > *Our entire test suite of 377 automated tests and 30 targeted judge attack tests validates every invariant in production."*
 
 ---
@@ -97,7 +97,7 @@
 | `00:00 – 00:18` | 46 words | 153 wpm | Control Center HUD & Hero Ribbon |
 | `00:18 – 00:32` | 38 words | 162 wpm | 5-Stage Agent Orchestration Graph |
 | `00:32 – 01:24` | 125 words | 144 wpm | Billing Outage Autonomous Failover |
-| `01:24 – 01:42` | 49 words | 163 wpm | Recovery Proof Certificate & MTTR |
+| `01:24 – 01:42` | 49 words | 163 wpm | Recovery Proof, verification evidence & MTTR |
 | `01:42 – 02:24` | 94 words | 134 wpm | Bounded Autonomy & Human Approval |
 | `02:24 – 02:57` | 82 words | 149 wpm | OCC Lease Resilience & Replay Engine |
 | `02:57 – 03:21` | 68 words | 170 wpm | Google Cloud Architecture Blueprint |

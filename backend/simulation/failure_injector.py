@@ -105,6 +105,19 @@ class FailureInjector:
             CrashConfig(tool_name=tool_name, remaining_count=remaining_count)
         )
 
+    def has_crash_after_external_success_config(
+        self,
+        workflow_id: str,
+        tool_name: str,
+    ) -> bool:
+        """Return whether a crash-after-success fault was already configured.
+
+        Demo scenarios are configured by both the API and the worker. This guard
+        keeps a one-time interruption deterministic instead of re-injecting the
+        same fault on every recovery dispatch.
+        """
+        return bool(self._crash_configs.get((workflow_id, tool_name)))
+
     async def check_failure(
         self,
         workflow_id: str,
@@ -232,8 +245,16 @@ def configure_scenario_3(injector: FailureInjector, workflow_id: str) -> None:
     """
     Scenario 3: Worker interruption.
 
-    No failure injection needed. The test harness kills the process.
-    The system must recover from Firestore state alone.
+    A worker is deterministically interrupted after the billing provider has
+    accepted the idempotent mutation, but before local completion is persisted.
+    RecoveryOS must reconcile authoritative external state and resume without
+    creating a second subscription.
     """
-    # No injections — this scenario tests infrastructure, not agent reasoning.
-    pass
+    if not injector.has_crash_after_external_success_config(
+        workflow_id, "setup_billing"
+    ):
+        injector.configure_crash_after_external_success(
+            workflow_id=workflow_id,
+            tool_name="setup_billing",
+            remaining_count=1,
+        )

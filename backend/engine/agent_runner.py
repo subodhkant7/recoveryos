@@ -22,6 +22,7 @@ from backend.models.events import EventType
 from backend.persistence.workflow_store import BaseWorkflowStore
 from backend.engine.workflow_engine import WorkflowEngine
 from backend.agents.agent_factory import AgentFactory
+from backend.simulation.failure_injector import CrashBeforePersistenceError
 
 logger = logging.getLogger("recoveryos.engine.agent_runner")
 
@@ -136,6 +137,7 @@ async def run_workflow_agent(
     - Outcome contract verification before transition to COMPLETED.
     - Transitions to UNKNOWN or RECOVERING on failures.
     """
+    services: Any | None = None
     try:
         wf_data = await store.get_workflow(workflow_id)
         if not wf_data:
@@ -300,15 +302,21 @@ async def run_workflow_agent(
         err_msg = str(e) or type(e).__name__
         tb_str = traceback.format_exc()
         logger.error(f"Agent execution error on workflow '{workflow_id}': {type(e).__name__}: {err_msg}\n{tb_str}")
+        is_interruption = isinstance(e, CrashBeforePersistenceError)
         await engine._record_event(
             workflow_id=workflow_id,
             event_type=EventType.STEP_FAILED,
-            title="Agent Execution Error",
+            title=(
+                "Worker Interruption After External Success"
+                if is_interruption
+                else "Agent Execution Error"
+            ),
             detail=err_msg,
             payload={
                 "error_type": type(e).__name__,
                 "error_message": err_msg,
                 "workflow_id": workflow_id,
+                "requires_reconciliation": is_interruption,
             },
             actor="system",
         )
@@ -321,6 +329,38 @@ async def run_workflow_agent(
                     detail=f"Agent execution interrupted by error: {type(e).__name__}",
                     actor="system",
                 )
+
+            # A simulated interruption models the dangerous boundary where an
+            # external side effect can succeed before the worker persists its
+            # local completion record. Reconcile against authoritative service
+            # state first, then use the normal bounded recovery path.
+            if is_interruption and services is not None:
+                reconciled = await engine.reconcile_interrupted_workflow(
+                    workflow_id, services
+                )
+                if reconciled and reconciled.get("state") == WorkflowState.EXECUTING.value:
+                    await engine.transition(
+                        workflow_id,
+                        WorkflowState.RECOVERING,
+                        detail="Worker interruption reconciled; dispatching bounded recovery",
+                        actor="system",
+                    )
+                    await engine._record_event(
+                        workflow_id=workflow_id,
+                        event_type=EventType.WORKFLOW_RESUMED,
+                        title="Worker Recovery Redispatched",
+                        detail="External mutation reconciled before autonomous retry",
+                        payload={"reconciled_after_interruption": True},
+                        actor="system",
+                    )
+                    return {
+                        "status": "RECOVERING",
+                        "workflow_id": workflow_id,
+                        "needs_redispatch": True,
+                        "reconciled_after_interruption": True,
+                    }
         except Exception:
-            pass
+            logger.exception(
+                "Unable to reconcile interrupted workflow '%s'", workflow_id
+            )
         return {"status": "ERROR", "workflow_id": workflow_id, "error": err_msg}

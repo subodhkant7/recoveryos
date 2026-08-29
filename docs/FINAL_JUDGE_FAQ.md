@@ -31,7 +31,7 @@ In Scenario 02 (`contradictory_evidence`), multiple identity/risk bureaus return
 ---
 
 ### 5. How do you prove recovery actually happened?
-Through independent outcome probes. After executing a tool, the agent runner transitions to `WorkflowState.VERIFYING`. It issues an active verification probe (e.g., an HTTP probe against the secondary billing provider). Only when all required outcomes are marked `verified: true` does the system transition to `COMPLETED` and generate the **Recovery Proof Certificate**.
+Through independent outcome probes. After executing a tool, the agent runner transitions to `WorkflowState.VERIFYING`. It issues an independent query against the target service. Only when all required outcomes are marked `verified: true` does the system transition to `COMPLETED` and render the **Evidence-Backed Recovery Proof** from the durable snapshot.
 
 ---
 
