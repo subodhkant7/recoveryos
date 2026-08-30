@@ -40,7 +40,14 @@ class DefaultWorkerSecurityValidator(BaseWorkerSecurityValidator):
     tenant identifier constraints, and contract integrity.
     """
 
-    ALLOWED_PRODUCER_PREFIXES = ("recoveryos-api", "recoveryos-worker", "recoveryos-system")
+    ALLOWED_PRODUCER_PREFIXES = (
+        "recoveryos-api",
+        "recoveryos-worker",
+        "recoveryos-system",
+        "recoveryos-operator",
+        "recoveryos-startup-reconciler",
+        "recoveryos",
+    )
 
     def validate_message_provenance(self, message: WorkflowExecutionMessage) -> None:
         if not message.producer_id or not any(message.producer_id.startswith(p) for p in self.ALLOWED_PRODUCER_PREFIXES):
