@@ -27,7 +27,7 @@ This document records implementation-backed validation of RecoveryOS's key relia
 
 ### Q4: "What happens if the evidence conflicts?"
 **Answer**: The policy engine enforces bounded autonomy:
-- In Scenario 02 (`contradictory_evidence`), the failure injector returns conflicting risk/billing evidence across providers.
+- In Scenario 02 (`contradictory_evidence`), the failure injector injects contradictory billing evidence: the action reports success, but independent verification detects the wrong plan tier (expected `enterprise`, actual `starter`).
 - The policy engine detects that automated failover violates risk constraints.
 - Execution immediately halts, the workflow transitions to `WorkflowState.AWAITING_APPROVAL`, and an `APPROVAL_REQUIRED` event is dispatched.
 - The UI exposes an authenticated human approval card. The agent cannot resume execution until an authorized human (`APPROVER` or `ADMIN` role) explicitly signs off.

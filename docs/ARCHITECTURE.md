@@ -119,7 +119,7 @@ Agent Request (e.g. setup_billing)
 7. External Service Mutation (Simulated or live enterprise endpoint)
       │
       ▼
-8. Immutable Evidence & Durable Context (Firestore persistence, context store update)
+8. Unique, Durable Evidence Records & Durable Context (Firestore persistence, context store update)
       │
       ▼
 9. Independent Verification Query (Separate query to verify actual state)

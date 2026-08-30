@@ -26,7 +26,7 @@ The decision is governed by the deterministic `PolicyEngine` (`backend/engine/po
 ---
 
 ### 4. What happens when evidence conflicts?
-In Scenario 02 (`contradictory_evidence`), multiple identity/risk bureaus return conflicting data (e.g., risk scores of 42 vs 88). Because autonomous action under contradictory evidence would violate compliance rules, the engine refuses to guess. It transitions to `AWAITING_APPROVAL`, exposes an approval card on the dashboard, and waits for an authenticated human operator.
+In Scenario 02 (`contradictory_evidence`), the system injects contradictory billing evidence: the action reports success, but independent verification detects the wrong plan tier (expected: `enterprise`, actual: `starter`). Because independent verification detects the mismatch and results in `billing_configured = FAILED`, the engine refuses to declare false recovery. It halts at the governed autonomy boundary, transitions to `AWAITING_APPROVAL`, exposes an approval card on the dashboard, and waits for an authenticated human operator.
 
 ---
 

@@ -47,7 +47,7 @@ RecoveryOS does not claim Gemini Enterprise Agent Platform (GEAP) services. Its 
 ## Demo flow
 
 1. **Billing provider outage** — A simulated primary provider returns `HTTP 503`; an ADK/Gemini agent diagnoses, policy permits an idempotent failover, and an independent billing query verifies the required plan and billing cycle before `RECOVERED • VERIFIED`.
-2. **Contradictory evidence** — The billing action reports success but returns the wrong plan tier. Independent verification fails, so RecoveryOS cannot declare recovery and stops at `AWAITING APPROVAL`.
+2. **Contradictory evidence** — Injects contradictory billing evidence: the action reports success, but independent verification detects the wrong plan tier (expected: `enterprise`, actual: `starter`). Verification results in `billing_configured = FAILED`, halting autonomous execution at the `AWAITING APPROVAL` governed autonomy boundary.
 3. **Worker interruption** — A deterministic post-write/pre-persistence interruption is reconciled against external state, then redispatched within the recovery budget without duplicate billing.
 
 ## Evaluation path

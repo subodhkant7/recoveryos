@@ -171,7 +171,7 @@ The primary `billing_unavailable` scenario is deterministic:
 | Scenario | What it proves | Safe terminal/next state |
 | --- | --- | --- |
 | `billing_unavailable` | Provider failure can use policy-approved autonomous recovery, then independent verification. | `RECOVERED • VERIFIED` only after every outcome passes. |
-| `contradictory_evidence` | A successful-looking billing action with the wrong plan tier fails independent verification and cannot become recovered. | `AWAITING APPROVAL`, then recovery or escalation after an authenticated human decision. |
+| `contradictory_evidence` | Injects contradictory billing evidence: the action reports success, but independent verification detects the wrong plan tier (expected: `enterprise`, actual: `starter`), resulting in `billing_configured = FAILED`. | `AWAITING APPROVAL` (governed autonomy boundary), then recovery or escalation after authenticated human sign-off. |
 | `worker_interruption` | A deterministic interruption after an external write but before local completion is reconciled against the authoritative service state. | `RECOVERING • AUTONOMOUS RETRY`, then verified recovery or escalation after the retry budget. |
 
 ## Independent Verification and Recovery Proof
