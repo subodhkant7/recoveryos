@@ -250,6 +250,8 @@ async def health():
         "service": "recoveryos",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "model": config.gemini_model,
+        "fallback_model": config.gemini_fallback_model,
+        "provider": config.llm_provider,
         "environment": config.environment,
     }
 

@@ -31,12 +31,14 @@ RecoveryOS is not another generic AI agent. An agent can reason and propose, but
 
 | Concern | Enforced by |
 | --- | --- |
-| Failure diagnosis and recovery proposal | Gemini 3.5 Flash through Google ADK |
+| Failure diagnosis and recovery proposal | Gemini 3.5 Flash on Vertex AI (with bounded Gemini 3.5 Flash Lite fallback) through Google ADK |
 | Authorization, safety limits, approvals | Deterministic `PolicyEngine` |
 | Duplicate side-effect protection | Canonical idempotency keys and operation claims |
 | Concurrent worker protection | Optimistic concurrency control and worker leases |
 | Recovery truth | Independent outcome probes and the outcome contract |
 | Failure boundary | Bounded retry, reconciliation, then human escalation |
+
+RecoveryOS uses Gemini 3.5 Flash on Vertex AI as its primary reasoning model, with Gemini 3.5 Flash Lite as a bounded fallback for retryable model availability/quota failures. Vertex AI authentication uses Google Cloud workload identity / Application Default Credentials rather than embedding model API keys.
 
 ## Fortified Enterprise Fleet Alignment
 

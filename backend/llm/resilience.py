@@ -280,20 +280,24 @@ class ResilientGemini(Gemini):
     - Circuit breaker gating
     - Request timeouts
     - Bounded exponential backoff with jitter on 429/transient errors
+    - Automatic single-attempt fallback to Gemini Flash Lite on retryable primary model failure
     - Redacted audit/resilience logging
     """
     model_config = {"extra": "allow", "arbitrary_types_allowed": True}
 
     rate_limiter: Any = None
     circuit_breaker: Any = None
+    fallback_model: str | None = None
     max_retries: int = 3
     initial_backoff: float = 2.0
     max_backoff: float = 30.0
     request_timeout: float = 30.0
+    _cached_client: Any = None
 
     def __init__(
         self,
         model: str | None = None,
+        fallback_model: str | None = None,
         client_kwargs: dict[str, Any] | None = None,
         rate_limiter: GeminiRateLimiter | None = None,
         circuit_breaker: GeminiCircuitBreaker | None = None,
@@ -307,10 +311,37 @@ class ResilientGemini(Gemini):
         super().__init__(model=model_name, client_kwargs=client_kwargs, **kwargs)
         object.__setattr__(self, "rate_limiter", rate_limiter or global_rate_limiter)
         object.__setattr__(self, "circuit_breaker", circuit_breaker or global_circuit_breaker)
+        object.__setattr__(self, "fallback_model", fallback_model)
         object.__setattr__(self, "max_retries", max_retries if max_retries is not None else config.gemini_max_retries)
         object.__setattr__(self, "initial_backoff", initial_backoff if initial_backoff is not None else config.gemini_initial_backoff_seconds)
         object.__setattr__(self, "max_backoff", max_backoff if max_backoff is not None else config.gemini_max_backoff_seconds)
         object.__setattr__(self, "request_timeout", request_timeout if request_timeout is not None else config.gemini_request_timeout_seconds)
+
+        if config.llm_provider == "vertex":
+            try:
+                import google.auth
+                from google import genai
+                try:
+                    credentials, _ = google.auth.default()
+                except Exception:
+                    credentials = None
+
+                client = genai.Client(
+                    vertexai=True,
+                    project=config.google_cloud_project,
+                    location=config.vertex_location,
+                    credentials=credentials,
+                )
+                object.__setattr__(self, "_cached_client", client)
+            except Exception as e:
+                logger.warning(f"Could not initialize Vertex AI genai.Client: {e}")
+
+    @property
+    def api_client(self) -> Any:
+        cached = getattr(self, "_cached_client", None)
+        if cached is not None:
+            return cached
+        return super().api_client
 
     async def generate_content_async(
         self,
@@ -318,7 +349,7 @@ class ResilientGemini(Gemini):
         stream: bool = False,
     ) -> AsyncGenerator[LlmResponse, None]:
         """
-        Executes generate_content_async with full resilience protection.
+        Executes generate_content_async with full resilience protection and bounded fallback.
         """
         attempt = 0
         while True:
@@ -342,7 +373,7 @@ class ResilientGemini(Gemini):
                 action="generate_content",
                 outcome="STARTED",
                 detail=f"Turn generation attempt {attempt}/{self.max_retries + 1}",
-                extra={"attempt": attempt},
+                extra={"attempt": attempt, "model": self.model},
             )
 
             try:
@@ -377,10 +408,56 @@ class ResilientGemini(Gemini):
                     action="generate_content",
                     outcome="FAILED",
                     detail=f"Attempt {attempt} failed: {reason} ({type(e).__name__})",
-                    extra={"category": category.value, "attempt": attempt, "error_type": type(e).__name__},
+                    extra={"category": category.value, "attempt": attempt, "error_type": type(e).__name__, "model": self.model},
                 )
 
-                if category == ErrorCategory.NON_RETRYABLE or attempt > self.max_retries:
+                # Check if retries exhausted on primary model
+                is_exhausted = (category == ErrorCategory.NON_RETRYABLE) or (attempt > self.max_retries)
+
+                if is_exhausted:
+                    # Attempt single fallback to fallback_model if available and retryable
+                    if (
+                        category == ErrorCategory.RETRYABLE
+                        and self.fallback_model
+                        and self.fallback_model != self.model
+                    ):
+                        record_resilience_event(
+                            event_type="MODEL_FALLBACK",
+                            action="switch_model",
+                            outcome="FALLBACK",
+                            detail=f"Primary model '{self.model}' failed ({reason}). Triggering single fallback attempt to '{self.fallback_model}'.",
+                            extra={"from_model": self.model, "to_model": self.fallback_model, "error": str(e)},
+                        )
+                        try:
+                            await self.rate_limiter.acquire()
+                            llm_request.model = self.fallback_model
+                            fallback_items: list[LlmResponse] = []
+
+                            async def _call_fallback():
+                                async for item in super(ResilientGemini, self).generate_content_async(llm_request, stream=stream):
+                                    fallback_items.append(item)
+
+                            await asyncio.wait_for(_call_fallback(), timeout=self.request_timeout)
+                            await self.circuit_breaker.record_success()
+                            record_resilience_event(
+                                event_type="GEMINI_REQUEST_SUCCESS",
+                                action="generate_content",
+                                outcome="SUCCESS",
+                                detail=f"Fallback generation succeeded with model '{self.fallback_model}'",
+                                extra={"model": self.fallback_model, "is_fallback": True},
+                            )
+                            for item in fallback_items:
+                                yield item
+                            return
+                        except Exception as fallback_err:
+                            record_resilience_event(
+                                event_type="FALLBACK_FAILED",
+                                action="fallback_attempt",
+                                outcome="FAILED",
+                                detail=f"Fallback to '{self.fallback_model}' also failed: {fallback_err}",
+                                extra={"fallback_model": self.fallback_model, "error_type": type(fallback_err).__name__},
+                            )
+
                     await self.circuit_breaker.record_failure()
                     if attempt > self.max_retries:
                         record_resilience_event(

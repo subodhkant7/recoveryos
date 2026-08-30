@@ -16,12 +16,26 @@ load_dotenv(override=False)
 class Config:
     """Immutable application configuration."""
 
-    # Gemini
+    # Gemini / Vertex LLM
     google_api_key: str = field(
         default_factory=lambda: os.environ.get("GOOGLE_API_KEY", "")
     )
+    llm_provider: str = field(
+        default_factory=lambda: os.environ.get(
+            "LLM_PROVIDER",
+            "vertex" if os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "").lower() == "true" else "gemini_api"
+        )
+    )
     gemini_model: str = field(
         default_factory=lambda: os.environ.get("GEMINI_MODEL", "gemini-3.5-flash")
+    )
+    gemini_fallback_model: str = field(
+        default_factory=lambda: os.environ.get("GEMINI_FALLBACK_MODEL", "gemini-3.5-flash-lite")
+    )
+    vertex_location: str = field(
+        default_factory=lambda: os.environ.get(
+            "GOOGLE_CLOUD_LOCATION", os.environ.get("VERTEX_LOCATION", "global")
+        )
     )
 
     # Persistence

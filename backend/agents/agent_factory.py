@@ -239,10 +239,14 @@ def _build_before_tool_callback(
 
 
 def _get_agent_model():
-    """Get the ADK Gemini model configured with the application's runtime API key and resilience layer."""
+    """Get the ADK Gemini model configured with the application's runtime provider, resilience layer, and fallback."""
     from backend.llm.resilience import ResilientGemini
-    client_kwargs = {"api_key": config.google_api_key} if config.google_api_key else None
-    return ResilientGemini(model=config.gemini_model, client_kwargs=client_kwargs)
+    client_kwargs = (
+        {"api_key": config.google_api_key}
+        if (config.google_api_key and config.llm_provider != "vertex")
+        else None
+    )
+    return ResilientGemini(model=config.gemini_model, fallback_model=config.gemini_fallback_model, client_kwargs=client_kwargs)
 
 
 class AgentFactory:

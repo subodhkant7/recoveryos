@@ -148,7 +148,7 @@ RecoveryOS implements first-party equivalents for enterprise agent fleet capabil
 
 ## 5. Infrastructure & Runtime Architecture
 
-- **Reasoning**: Gemini 3.5 Flash via Google ADK (`google-adk`).
-- **Compute**: Cloud Run hosting FastAPI API server and asynchronous worker consumers.
+- **Reasoning**: RecoveryOS uses Gemini 3.5 Flash on Vertex AI as its primary reasoning model, with Gemini 3.5 Flash Lite as a bounded fallback for retryable model availability/quota failures. Vertex AI authentication uses Google Cloud workload identity / Application Default Credentials rather than embedding model API keys.
+- **Compute**: Cloud Run hosting FastAPI API server and asynchronous worker consumers in `asia-east1`.
 - **Persistence**: Cloud Firestore (`FirestoreWorkflowStore`) with optimistic concurrency control (OCC), distributed leases, and append-only event logs.
 - **Messaging**: Cloud Pub/Sub (`GooglePubSubPublisher`) for asynchronous workflow dispatch and worker decoupling.
