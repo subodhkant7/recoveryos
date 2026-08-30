@@ -164,6 +164,20 @@ async def run_workflow_agent(
                 actor="taskmaster",
             )
 
+        # Initialize Fleet Observability trace & record Orchestrator dispatch
+        try:
+            from backend.fleet.observability import fleet_tracer
+            fleet_tracer.start_trace(workflow_id)
+            fleet_tracer.record_event(
+                workflow_id=workflow_id,
+                agent_id="orchestrator",
+                event_type="WORKFLOW_DISPATCH",
+                detail=f"Orchestrator dispatched workflow for scenario '{wf_data.get('scenario', 'default')}'",
+                metadata={"tenant_id": wf_data.get("tenant_id", "tenant-default"), "scenario": wf_data.get("scenario")},
+            )
+        except Exception:
+            pass
+
         # In multi-process and containerized environments, auto-configure scenario failure injection
         scenario_name = wf_data.get("scenario")
         services = getattr(agent_factory, "services", getattr(agent_factory, "_services", None))

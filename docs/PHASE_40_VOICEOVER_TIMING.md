@@ -1,6 +1,6 @@
 # Phase 40 — Founder Voiceover Timing & Narration Script
 
-**Video Track:** `artifacts/recoveryos_judge_demo_silent.mp4`  
+**Video Track:** `artifacts/recoveryos_demo_silent.mp4`
 **Total Target Duration:** **03:48.00** (228 seconds)  
 **Target Speaking Pace:** 130–140 words per minute (Calm, authoritative, engineering-first tone)
 
@@ -44,7 +44,7 @@
 * **Founder Voiceover:**
   > *"Once independent verification satisfies every required outcome, RecoveryOS renders the Evidence-Backed Recovery Proof.*
   > *Mean Time to Recover was 5.2 seconds with zero human interventions.*  
-  > *Judges can inspect the 4 core audit questions in the Decision Trace: What did you see? What did you think? What did you do? And how do you know it worked?"*
+  > *Technical reviewers can inspect the 4 core audit questions in the Decision Trace: What did you see? What did you think? What did you do? And how do you know it worked?"*
 
 ---
 
@@ -76,7 +76,7 @@
   > *Cloud Pub/Sub handles decoupled event distribution.*  
   > *Cloud Firestore provides distributed OCC leases and idempotency deduplication.*  
   > *And Gemini 3.5 Flash with the Google Agent Development Kit provides bounded reasoning.*
-  > *Our entire test suite of 377 automated tests and 30 targeted judge attack tests validates every invariant in production."*
+  > *Our entire test suite of 377 automated tests and 30 targeted engineering validation tests validates every invariant in production."*
 
 ---
 

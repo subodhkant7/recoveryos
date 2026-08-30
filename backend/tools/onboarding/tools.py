@@ -533,6 +533,29 @@ class OnboardingTools:
             actor="verifier",
         )
 
+        # Record Fleet Verification trace and durable context
+        try:
+            from backend.fleet.observability import fleet_tracer
+            from backend.fleet.context_store import fleet_context_store
+            fleet_tracer.record_event(
+                workflow_id=workflow_id,
+                agent_id="verification-agent",
+                event_type="OUTCOME_VERIFICATION",
+                tool="verify_outcome",
+                outcome="PASSED" if passed else "FAILED",
+                detail=f"Independent verification {'passed' if passed else 'failed'} for {outcome_id}",
+                metadata={"outcome_id": outcome_id, "passed": passed, "evidence_id": evidence_id},
+            )
+            fleet_context_store.save_context(
+                workflow_id=workflow_id,
+                agent_id="verification-agent",
+                key=f"verified_{outcome_id}",
+                value={"passed": passed, "discrepancies": discrepancies, "evidence_id": evidence_id},
+                scope="verification",
+            )
+        except Exception:
+            pass
+
         # Update associated recovery plans
         plans = await self._store.get_recovery_plans(workflow_id)
         for p in plans:

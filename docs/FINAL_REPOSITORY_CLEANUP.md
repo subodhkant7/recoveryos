@@ -2,10 +2,10 @@
 
 ## 1. Executive Summary
 
-In preparation for final hackathon evaluation, the repository was cleaned, audited, and hardened:
+The repository was cleaned, audited, and hardened for public release:
 - Historical intermediate phase reports (Phases 6–32) were safely relocated outside the repository to `../RecoveryOS-archive/phase-reports/`.
 - Obvious OS metadata junk (`.DS_Store`) was purged from the working tree.
-- Core judge documentation, runbooks, and checklists were verified and retained.
+- Core engineering documentation, runbooks, and checklists were verified and retained.
 - All 37 test suites (377 passing tests) were preserved to guarantee 100% regression and security coverage.
 - Git commit history was preserved with zero force-pushes or branch rewrites.
 
@@ -13,15 +13,15 @@ In preparation for final hackathon evaluation, the repository was cleaned, audit
 
 ## 2. Inventory of Retained Submission Documentation
 
-The `docs/` directory is now focused strictly on judge-facing and operational resources:
+The `docs/` directory is focused on engineering and operational resources:
 
 ```text
 README.md                                # Root overview, architecture, 5-stage lifecycle, setup, demo guide
 docs/
-├── FINAL_JUDGE_FAQ.md                  # 15 technical, honest judge questions answered
+├── FINAL_TECHNICAL_FAQ.md              # 15 technical implementation questions answered
 ├── FINAL_SUBMISSION_CHECKLIST.md       # Full submission compliance certification
-├── PHASE_33_FINAL_JUDGE_SCRIPT.md      # Canonical 2.5-minute live demo presentation script
-├── PHASE_33_JUDGE_ATTACK_MATRIX.md     # 10 adversarial judge attack Q&A
+├── PHASE_33_DEMONSTRATION_SCRIPT.md    # Canonical 2.5-minute live demonstration script
+├── PHASE_33_ENGINEERING_VALIDATION.md  # Reliability, recovery, and governance validation
 ├── PRODUCTION_RUNBOOK.md               # Production operational triage runbook
 ├── DEPLOYMENT_SAFETY.md                # Deployment safety invariants & fail-closed rules
 ├── FINAL_REPOSITORY_CLEANUP.md         # This repository cleanup certification
@@ -48,11 +48,11 @@ Historical development milestone reports moved outside the repository:
 ## 4. Test Suite Retention & Integrity
 
 All 37 test files were retained in `tests/`:
-- `tests/test_phase33_final_judge_attack.py` (16 judge attack tests)
-- `tests/test_phase32_demo_attack.py` (14 demo attack tests)
+- `tests/test_phase33_final_judge_attack.py` (16 adversarial validation tests)
+- `tests/test_phase32_demo_attack.py` (14 demonstration validation tests)
 - `tests/test_phase31_adversarial_audit.py` (19 adversarial audit tests)
 - `tests/test_phase30_final_integration.py` (5 integration tests)
-- `tests/test_phase28_judge_demo.py` (4 judge demo tests)
+- `tests/test_phase28_judge_demo.py` (4 demonstration tests)
 - `tests/test_frontend_experience.py` (4 frontend API tests)
 - 31 core unit, integration, concurrency, security, and persistence test suites
 

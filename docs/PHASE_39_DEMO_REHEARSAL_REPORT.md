@@ -67,5 +67,5 @@ NEW_COMMIT=PENDING_PHASE_39_DOCUMENTATION
 
 - **Secret Scan**: `CURRENT_TREE_SECRET_SCAN=PASS` (0 API keys, JWT tokens, or private PEM keys).
 - **Regression Suite**: `377 passed, 15 skipped, 0 failed in 40.74s`.
-- **Targeted Judge Attack Suite**: `30 passed, 0 failed in 13.16s`.
+- **Targeted Engineering Validation Suite**: `30 passed, 0 failed in 13.16s`.
 - **Single Take Capability**: **YES**. Rehearsal flow executes deterministically without failure.

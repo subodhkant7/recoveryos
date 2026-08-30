@@ -92,7 +92,30 @@ def _build_before_tool_callback(
 
         contract = wf_data.get("contract")
 
-        # Evaluate policy
+        # 1. Fleet Guardrails deterministic safety inspection
+        from backend.fleet.guardrails import fleet_guardrails, GuardrailOutcome
+        guardrail_results = fleet_guardrails.inspect(
+            agent_id="taskmaster",
+            tool_name=tool_name,
+            tool_args=args,
+        )
+        if fleet_guardrails.get_overall_outcome(guardrail_results) == GuardrailOutcome.BLOCK:
+            block_reason = next((r.reason for r in guardrail_results if r.outcome == GuardrailOutcome.BLOCK), "Guardrail blocked")
+            return {"status": "blocked", "reason": block_reason, "action_required": "rejected"}
+
+        # 2. Fleet Gateway & Zero-Trust Identity evaluation
+        from backend.fleet.gateway import fleet_gateway, GatewayOutcome
+        tenant_id = wf_data.get("tenant_id", "tenant-default")
+        gw_decision = fleet_gateway.evaluate_with_audit(
+            agent_id="taskmaster",
+            tool_name=tool_name,
+            tenant_id=tenant_id,
+            workflow_id=workflow_id,
+        )
+        if gw_decision.outcome == GatewayOutcome.DENY:
+            return {"status": "blocked", "reason": gw_decision.reason, "action_required": "rejected"}
+
+        # 3. Deterministic PolicyEngine evaluation
         decision = policy_engine.evaluate(
             tool_name=tool_name,
             tool_args=args,
@@ -118,6 +141,24 @@ def _build_before_tool_callback(
         )
 
         if decision.outcome.value == "APPROVED":
+            # 4. Fleet Observability & Durable Context updates on approved tool execution
+            from backend.fleet.observability import fleet_tracer
+            from backend.fleet.context_store import fleet_context_store
+            fleet_tracer.record_event(
+                workflow_id=workflow_id,
+                agent_id="taskmaster",
+                event_type="TOOL_GATEWAY_APPROVED",
+                tool=tool_name,
+                decision="ALLOW",
+                detail=f"Gateway & Policy approved tool '{tool_name}'",
+            )
+            fleet_context_store.save_context(
+                workflow_id=workflow_id,
+                agent_id="taskmaster",
+                key=f"last_tool_args_{tool_name}",
+                value={k: v for k, v in args.items() if k != "workflow_id"},
+                scope="execution",
+            )
             return None  # Allow execution
 
         if decision.outcome.value == "REQUIRES_HUMAN_APPROVAL":

@@ -1,6 +1,6 @@
-# RecoveryOS — Final Judge FAQ
+# RecoveryOS — Technical FAQ
 
-Technical, implementation-grounded answers to the 15 most important judge questions.
+Technical, implementation-grounded answers to 15 common questions about the system's behavior and design.
 
 ---
 

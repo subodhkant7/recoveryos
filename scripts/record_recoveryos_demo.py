@@ -4,7 +4,7 @@ RecoveryOS Automated Video Demo Generator (Phase 40).
 
 Fast & Deterministic 1080p Video Generation Pipeline.
 Generates:
-  artifacts/recoveryos_judge_demo_silent.mp4
+  artifacts/recoveryos_demo_silent.mp4
 
 Total Duration: 228.0 seconds (3 minutes 48 seconds).
 Resolution: 1920x1080 (16:9).
@@ -19,7 +19,7 @@ import sys
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ARTIFACTS_DIR = os.path.join(ROOT_DIR, "artifacts")
 FRAMES_DIR = os.path.join(ARTIFACTS_DIR, "demo_frames")
-OUTPUT_VIDEO = os.path.join(ARTIFACTS_DIR, "recoveryos_judge_demo_silent.mp4")
+OUTPUT_VIDEO = os.path.join(ARTIFACTS_DIR, "recoveryos_demo_silent.mp4")
 FFMPEG_BIN = "/opt/homebrew/bin/ffmpeg" if os.path.exists("/opt/homebrew/bin/ffmpeg") else "ffmpeg"
 
 def build_segment_filtergraph(segment_idx):

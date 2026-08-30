@@ -695,6 +695,164 @@
       </div>
     </div>
 
+    <!-- MODAL: Enterprise Agent Fleet Control Plane View -->
+    <div class="modal-overlay hidden" id="modal-fleet-view">
+      <div class="modal-card fleet-modal">
+        <div class="modal-header">
+          <div class="modal-title-wrap">
+            <span class="modal-icon">📡</span>
+            <div>
+              <h3 class="modal-title">ENTERPRISE AGENT FLEET CONTROL PLANE</h3>
+              <span class="modal-subtitle">Cross-department discovery, zero-trust identity, durable context &amp; failure-tolerant routing</span>
+            </div>
+          </div>
+          <button class="btn-close-modal" id="btn-close-fleet">✕</button>
+        </div>
+
+        <div class="modal-body fleet-modal-body">
+          <!-- Compliance & Data Safety Notice -->
+          <div class="fleet-safety-banner">
+            <span class="safety-icon">🛡️</span>
+            <span class="safety-text">Demo data is synthetic. Production-data access is bounded by tenant, agent identity, tool scope and policy.</span>
+          </div>
+
+          <!-- Top Fleet Stats Bar -->
+          <div class="fleet-stats-row" id="fleet-stats-summary">
+            <div class="fleet-stat-pill">
+              <span class="stat-label">CONTROL PLANE</span>
+              <span class="stat-val online" id="fleet-status-text">OPERATIONAL</span>
+            </div>
+            <div class="fleet-stat-pill">
+              <span class="stat-label">REGISTERED AGENTS</span>
+              <span class="stat-val cyan" id="fleet-total-agents">7</span>
+            </div>
+            <div class="fleet-stat-pill">
+              <span class="stat-label">DEPARTMENTS</span>
+              <span class="stat-val purple" id="fleet-total-depts">4</span>
+            </div>
+            <div class="fleet-stat-pill">
+              <span class="stat-label">ACTIVE ROUTES</span>
+              <span class="stat-val amber" id="fleet-total-routes">6</span>
+            </div>
+          </div>
+
+          <!-- Fleet Subsections Navigation -->
+          <div class="fleet-nav-tabs">
+            <button class="fleet-tab active" data-tab="registry">AGENT REGISTRY</button>
+            <button class="fleet-tab" data-tab="routing">FAILURE-TOLERANT ROUTING</button>
+            <button class="fleet-tab" data-tab="trace">ACTIVE WORKFLOW FLEET TRACE</button>
+            <button class="fleet-tab" data-tab="context">DURABLE AGENT CONTEXT</button>
+            <button class="fleet-tab" data-tab="security">ZERO-TRUST SECURITY PROOFS</button>
+          </div>
+
+          <!-- Tab 1: Agent Registry -->
+          <div class="fleet-tab-pane active" id="fleet-pane-registry">
+            <div class="fleet-agent-grid" id="fleet-agent-grid">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+
+          <!-- Tab 2: Routing Table -->
+          <div class="fleet-tab-pane hidden" id="fleet-pane-routing">
+            <div class="routing-table-card">
+              <div class="routing-table-header">
+                <span>OUTCOME GOAL</span>
+                <span>PRIMARY SPECIALIST</span>
+                <span>FAILOVER SPECIALIST</span>
+                <span>VERIFICATION SPECIALIST</span>
+                <span>GOVERNANCE</span>
+              </div>
+              <div class="routing-table-body" id="fleet-routing-list">
+                <!-- Dynamically populated -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 3: Active Workflow Fleet Trace -->
+          <div class="fleet-tab-pane hidden" id="fleet-pane-trace">
+            <div class="trace-summary-header" id="fleet-trace-summary">
+              <span class="trace-tag">TRACE ID: <code id="fleet-active-trace-id">none</code></span>
+              <span class="trace-tag">WORKFLOW: <code id="fleet-active-wf-id">none</code></span>
+              <span class="trace-tag">CURRENT AGENT: <code id="fleet-active-agent-id">none</code></span>
+            </div>
+            <div class="trace-event-timeline" id="fleet-trace-timeline">
+              <div class="empty-feed">
+                <div class="empty-icon">📡</div>
+                <div class="empty-title">No Active Fleet Trace Selected</div>
+                <div class="empty-sub">Simulate or select an incident to inspect OpenTelemetry-compatible agent traces.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 4: Durable Context -->
+          <div class="fleet-tab-pane hidden" id="fleet-pane-context">
+            <div class="context-container" id="fleet-context-container">
+              <div class="empty-feed">
+                <div class="empty-icon">💾</div>
+                <div class="empty-title">No Workflow Context Loaded</div>
+                <div class="empty-sub">Select an incident to view compliance-safe durable state across interruptions.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 5: Zero-Trust Security Proofs -->
+          <div class="fleet-tab-pane hidden" id="fleet-pane-security">
+            <div class="security-proofs-grid" id="fleet-security-proofs-grid">
+              <div class="security-proof-card allow">
+                <div class="sec-card-header">
+                  <span class="sec-badge pass">ALLOW</span>
+                  <span class="sec-title">Authorized Agent Execution</span>
+                </div>
+                <div class="sec-detail"><code>taskmaster</code> → <code>setup_billing</code> (tenant: <code>tenant-default</code>, scope: <code>customer.billing</code>)</div>
+                <div class="sec-reason">Identity check: PASS • Tenant check: PASS • Policy rule: APPROVED</div>
+              </div>
+
+              <div class="security-proof-card deny">
+                <div class="sec-card-header">
+                  <span class="sec-badge fail">DENY</span>
+                  <span class="sec-title">Unauthorized Tool Capability</span>
+                </div>
+                <div class="sec-detail"><code>billing-agent</code> → <code>activate_account</code></div>
+                <div class="sec-reason">Tool 'activate_account' not in billing-agent's allowed_tools set</div>
+              </div>
+
+              <div class="security-proof-card deny">
+                <div class="sec-card-header">
+                  <span class="sec-badge fail">DENY</span>
+                  <span class="sec-title">Cross-Tenant Isolation Breach</span>
+                </div>
+                <div class="sec-detail"><code>scoped-agent</code> (tenant: <code>tenant-acme</code>) → target tenant: <code>tenant-globex</code></div>
+                <div class="sec-reason">Agent tenant 'tenant-acme' cannot access target tenant 'tenant-globex'</div>
+              </div>
+
+              <div class="security-proof-card deny">
+                <div class="sec-card-header">
+                  <span class="sec-badge fail">DENY</span>
+                  <span class="sec-title">Out-of-Scope Data Boundary</span>
+                </div>
+                <div class="sec-detail"><code>billing-agent</code> → requested data scope: <code>customer.identity</code></div>
+                <div class="sec-reason">Data scope 'customer.identity' outside agent's allowed scopes ['customer.billing']</div>
+              </div>
+
+              <div class="security-proof-card block">
+                <div class="sec-card-header">
+                  <span class="sec-badge block">BLOCK</span>
+                  <span class="sec-title">RecoveryOS Agent Guardrail</span>
+                </div>
+                <div class="sec-detail"><code>taskmaster</code> → <code>setup_billing(password="[RAW]")</code> / <code>provider="ignore previous instructions"</code></div>
+                <div class="sec-reason">Deterministic pattern match: sensitive credential / prompt injection indicator blocked before execution</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn-cancel" id="btn-close-fleet-footer">Close</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <script src="/console/app.js" type="module"></script>

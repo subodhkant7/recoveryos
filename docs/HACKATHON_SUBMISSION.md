@@ -50,13 +50,15 @@ RecoveryOS does not claim Gemini Enterprise Agent Platform (GEAP) services. Its 
 2. **Contradictory evidence** — The billing action reports success but returns the wrong plan tier. Independent verification fails, so RecoveryOS cannot declare recovery and stops at `AWAITING APPROVAL`.
 3. **Worker interruption** — A deterministic post-write/pre-persistence interruption is reconciled against external state, then redispatched within the recovery budget without duplicate billing.
 
-## Judge path
+## Evaluation path
 
 Open the [production command center](https://recoveryos-321161003794.asia-east1.run.app/), run **Billing provider outage**, then inspect the lifecycle, policy decision, action result, verification evidence, and Evidence-Backed Recovery Proof. Run **Contradictory evidence** next to see the safety boundary rather than a false success.
 
 ## Code evidence
 
 - Runtime model and ADK agent construction: [`backend/config.py`](../backend/config.py), [`backend/agents/agent_factory.py`](../backend/agents/agent_factory.py)
+- Enterprise Agent Fleet Control Plane (Registry, Identity, Gateway, Context, Guardrails, Observability, Routing): [`backend/fleet/`](../backend/fleet/)
+- Architecture specification: [`docs/ARCHITECTURE.md`](ARCHITECTURE.md)
 - Independent verification completion gate: [`backend/engine/agent_runner.py`](../backend/engine/agent_runner.py), [`backend/tools/onboarding/tools.py`](../backend/tools/onboarding/tools.py)
 - Policy enforcement: [`backend/engine/policy_engine.py`](../backend/engine/policy_engine.py)
 - Durable state and claims: [`backend/persistence/workflow_store.py`](../backend/persistence/workflow_store.py)

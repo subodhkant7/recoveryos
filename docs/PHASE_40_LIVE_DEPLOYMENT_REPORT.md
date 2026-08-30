@@ -11,7 +11,7 @@
 | **GCP Project** | `recoveryos-506713` | `recoveryos-506713` (`asia-east1`) | **VERIFIED** |
 | **Cloud Run API Service** | `recoveryos` | `revision recoveryos-00022-nt7` (100% traffic) | **SERVING** |
 | **Cloud Run Worker Service** | `recoveryos-worker` | `revision recoveryos-worker-00017-9pt` (100% traffic) | **SERVING** |
-| **Unauthenticated Judge Access** | `--allow-unauthenticated` | Active (No Google IAM login required) | **VERIFIED** |
+| **Unauthenticated Public Access** | `--allow-unauthenticated` | Active (No Google IAM login required) | **VERIFIED** |
 | **Live Health Check (`/api/health`)** | HTTP 200 `healthy` | `{"status":"healthy","service":"recoveryos","environment":"production","model":"gemini-3.5-flash"}` | **PASSED** |
 | **Live Scenario 1 (Billing Outage)** | Autonomous Recovery | **COMPLETED** (12 steps, 53 audit events) | **PASSED** |
 | **Live Scenario 2 (Contradictory)** | Governed Verification | **COMPLETED** (12 steps, 41 audit events) | **PASSED** |
@@ -26,14 +26,14 @@
 
 ```mermaid
 graph TD
-    Judge["Hackathon Judge Browser"] -->|HTTPS (No IAM Required)| APIServer["Cloud Run: recoveryos<br/>(API & Command Center UI)"]
+    Reviewer["Technical Reviewer Browser"] -->|HTTPS (No IAM Required)| APIServer["Cloud Run: recoveryos<br/>(API & Command Center UI)"]
     APIServer -->|Durable State & Snapshots| Firestore["Google Cloud Firestore<br/>(recoveryosdb)"]
     APIServer -->|Async Execution Message| PubSub["Google Cloud Pub/Sub<br/>(recoveryos-workflow-execution)"]
     PubSub -->|Push Subscription Envelope| WorkerService["Cloud Run: recoveryos-worker<br/>(Asynchronous Execution Engine)"]
     WorkerService -->|Live Generative Intelligence| Gemini["Google Gemini 3.5 Flash"]
     WorkerService -->|Independent Verification| Tools["Deterministic Tool Engine & External Services"]
     WorkerService -->|OCC Leases & Audit Events| Firestore
-    APIServer -->|Single-Use SSE Streaming| Judge
+    APIServer -->|Single-Use SSE Streaming| Reviewer
 ```
 
 ---
@@ -69,9 +69,9 @@ graph TD
 
 ---
 
-## 4. Step-by-Step Judge Evaluation Walkthrough
+## 4. Step-by-Step Technical Walkthrough
 
-Hackathon judges can evaluate RecoveryOS live in two easy ways:
+Technical reviewers can evaluate RecoveryOS live in two easy ways:
 
 ### Option A: Interactive Command Center UI (Browser)
 1. **Open the Live URL**:

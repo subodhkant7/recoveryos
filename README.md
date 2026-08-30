@@ -15,7 +15,7 @@ Enterprise agents can return `HTTP 200` while the business outcome remains broke
 
 Gemini supplies bounded reasoning inside a Google ADK agent runtime. RecoveryOS-native deterministic code remains the authority for policy, state transitions, idempotent execution, verification, and escalation.
 
-## Judge Quickstart
+## Quickstart
 
 1. Open the [canonical command center](https://recoveryos-321161003794.asia-east1.run.app/).
 2. Choose **Simulate an incident** → **Billing provider outage**.
@@ -75,6 +75,74 @@ flowchart TD
 ```
 
 Cloud Run is the deployment/runtime layer. Firestore stores workflow snapshots, evidence, audit history, idempotency records, and operation claims when `PERSISTENCE_BACKEND=firestore`. Pub/Sub is the asynchronous dispatch boundary when `EVENT_PUBLISHER_BACKEND=pubsub`.
+
+## Enterprise Agent Fleet Control Plane
+
+RecoveryOS is a **multi-agent enterprise recovery control plane with explicit separation of concerns**:
+
+```
+                  ENTERPRISE AGENT FLEET
+                           │
+                           ▼
+                    ORCHESTRATOR
+                           │
+                ┌──────────┴──────────┐
+                │                     │
+                ▼                     ▼
+       TASKMASTER EXECUTION    RECOVERY SPECIALIST
+                │               READ-ONLY DIAGNOSIS
+                │                     │
+                │                     ▼
+                │              RECOVERY PLAN
+                │                     │
+                └──────────┬──────────┘
+                           │
+                           ▼
+                    AGENT GATEWAY
+                           │
+                    ┌──────┴──────┐
+                    │             │
+                  IDENTITY     GUARDRAILS
+                    │             │
+                    └──────┬──────┘
+                           │
+                           ▼
+                      POLICY ENGINE
+                           │
+                           ▼
+                    MUTATING TOOLS
+                           │
+                           ▼
+               INDEPENDENT VERIFICATION
+                           │
+                           ▼
+                    FIRESTORE EVIDENCE
+                           │
+                    ┌──────┴──────┐
+                    │             │
+                    ▼             ▼
+                  PROVE       RECOVER /
+                              ESCALATE
+```
+
+> **First-Party Equivalence Statement**:
+> RecoveryOS implements first-party equivalents for these enterprise agent capabilities rather than claiming integration with Gemini Enterprise Agent Platform products.
+>
+> The current architecture uses a dedicated execution agent rather than one mutating LLM agent per domain. Domain agent identities define capability and data boundaries around the shared execution boundary.
+
+### Control Plane Subsystems
+
+1. **Orchestrator** ([`backend/agents/agent_factory.py`](backend/agents/agent_factory.py)): Top-level ADK coordinator managing sub-agent handoffs between execution and diagnosis.
+2. **Recovery Specialist** ([`backend/agents/agent_factory.py`](backend/agents/agent_factory.py)): Dedicated read-only Gemini reasoning agent that diagnoses failures, queries service health, and creates structured `RecoveryPlan` objects.
+3. **Taskmaster** ([`backend/agents/agent_factory.py`](backend/agents/agent_factory.py)): Unified execution agent executing policy-gated mutations and approved recovery plans.
+4. **Independent Verification** ([`backend/tools/onboarding/tools.py`](backend/tools/onboarding/tools.py)): Deterministic query probes verifying ground-truth service state (`Action Executed ≠ Recovery Verified`).
+5. **Agent Registry** ([`backend/fleet/registry.py`](backend/fleet/registry.py)): Cross-department agent discovery with typed Agent Cards, versioning, capability declarations, allowed tools, and data scopes.
+6. **Agent Identity & Zero-Trust Scope** ([`backend/fleet/identity.py`](backend/fleet/identity.py)): Bound agent identities enforcing tenant isolation, role boundaries, and fine-grained data scopes before tool invocation.
+7. **Agent Gateway** ([`backend/fleet/gateway.py`](backend/fleet/gateway.py)): Centralized routing and policy boundary chaining agent identity checks, tenant/scope validation, deterministic policy rules, and structured security audit decisions.
+8. **Durable Agent Context** ([`backend/fleet/context_store.py`](backend/fleet/context_store.py)): Exact, structured, compliance-safe state persistence across extended timelines and worker interruption events.
+9. **RecoveryOS Agent Guardrails** ([`backend/fleet/guardrails.py`](backend/fleet/guardrails.py)): Deterministic safety inspector checking sensitive fields, prompt injection indicators, unknown tools, and unauthorized scopes before mutation.
+10. **Fleet Observability** ([`backend/fleet/observability.py`](backend/fleet/observability.py)): OpenTelemetry-compatible structured audit traces capturing W3C `trace_id`, `span_id`, `parent_span_id`, agent IDs, decisions, and tool executions.
+11. **Failure-Tolerant Inter-Agent Routing** ([`backend/fleet/routing.py`](backend/fleet/routing.py)): Explicit routing from primary specialist agents to fallback recovery agents within a bounded recovery budget to prevent unbounded loops.
 
 ## Google Technology Used
 

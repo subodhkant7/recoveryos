@@ -1,6 +1,6 @@
-# Phase 33: Final Judge One-Take Script (2–3 Minutes)
+# Phase 33: Final Demonstration Script (2–3 Minutes)
 
-This script is engineered for a live, uninterrupted hackathon presentation showing autonomous recovery, policy safety, outcome verification, and worker resilience.
+This script is engineered for a live, uninterrupted presentation showing autonomous recovery, policy safety, outcome verification, and worker resilience.
 
 ---
 

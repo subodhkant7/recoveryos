@@ -1,7 +1,7 @@
-# Phase 40 — Automated Silent Judge Demo Video Specification
+# Phase 40 — Automated Silent Demonstration Video Specification
 
 **Status:** COMPLETE & CERTIFIED  
-**Output Artifact:** `artifacts/recoveryos_judge_demo_silent.mp4`  
+**Output Artifact:** `artifacts/recoveryos_demo_silent.mp4`
 **Video Target Duration:** 3:45–3:55 (Actual: **03:48.00 / 228.0 seconds**)  
 **Video Resolution:** **1920×1080 (16:9)** @ 30.0 FPS  
 **Format:** H.264 / MP4 (yuv420p, progressive)  
@@ -25,21 +25,21 @@ The video demonstrates the core operational reality:
 The entire video recording and compilation process is **100% automated, deterministic, and reproducible** via a single script execution:
 
 ```bash
-./scripts/record_judge_demo.sh
+./scripts/record_recoveryos_demo.sh
 ```
 
 ### Pipeline Components
 
-1. **Pipeline Runner (`scripts/record_judge_demo.sh`)**:
+1. **Pipeline Runner (`scripts/record_recoveryos_demo.sh`)**:
    - Validates Python virtualenv and system `ffmpeg` binary.
    - Executes the deterministic rendering engine.
    - Verifies the integrity and byte size of the generated `.mp4`.
 
-2. **Deterministic Rendering Engine (`scripts/record_judge_demo.py`)**:
+2. **Deterministic Rendering Engine (`scripts/record_recoveryos_demo.py`)**:
    - Generates pixel-accurate 1080p frames representing the real RecoveryOS Command Center UI.
    - Applies live HUD ribbons, Google Cloud badges, 5-stage orchestration state graphs, scenario decision traces, and evidence-backed recovery proofs.
    - Encodes exact-duration H.264 video segments at 30 FPS.
-   - Concatenates the segments seamlessly into `artifacts/recoveryos_judge_demo_silent.mp4`.
+   - Concatenates the segments seamlessly into `artifacts/recoveryos_demo_silent.mp4`.
 
 ---
 
@@ -60,8 +60,8 @@ The entire video recording and compilation process is **100% automated, determin
 
 ## 4. Verification & Audit Results
 
-- **Executable File:** `scripts/record_judge_demo.sh` (Mode: `0755`)
-- **Video Path:** `artifacts/recoveryos_judge_demo_silent.mp4`
+- **Executable File:** `scripts/record_recoveryos_demo.sh` (Mode: `0755`)
+- **Video Path:** `artifacts/recoveryos_demo_silent.mp4`
 - **Duration Check:** `228.00s` (Within 3:45–3:55 range; well below 3:59 hard limit)
 - **Resolution Check:** `1920x1080` (1080p Full HD)
 - **Container Format:** ISO Media MP4 (H.264 / AVC)

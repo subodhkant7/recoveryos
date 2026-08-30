@@ -1,12 +1,12 @@
-# RecoveryOS — Phase 38 Judge Demonstration Guide
+# RecoveryOS — Phase 38 Demonstration Guide
 
 > **A recovery-first control plane for autonomous operations.**
 
-This guide provides the exact timed 4-minute demonstration script for hackathon judges, highlighting the central thesis: **Action Executed ≠ Recovery Verified**.
+This guide provides the exact timed 4-minute demonstration script for technical reviewers, highlighting the central thesis: **Action Executed ≠ Recovery Verified**.
 
 ---
 
-## Central Judge Takeaway
+## Central Engineering Takeaway
 
 > **"RecoveryOS is not another agent that performs an action; it is a control plane that governs autonomous action and refuses to call recovery successful until the outcome is independently verified."**
 

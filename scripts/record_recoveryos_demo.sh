@@ -2,7 +2,7 @@
 # ==============================================================================
 # RecoveryOS — Automated Judge Demo Video Pipeline (Phase 40)
 #
-# Generates: artifacts/recoveryos_judge_demo_silent.mp4
+# Generates: artifacts/recoveryos_demo_silent.mp4
 # Target Duration: 3:45–3:55 (Exact: 3m 48s)
 # Resolution: 1920x1080 (16:9), 30 FPS
 # ==============================================================================
@@ -37,12 +37,12 @@ echo "[*] Using Python: ${PYTHON_BIN}"
 echo "[*] Using FFmpeg: ${FFMPEG_BIN}"
 
 # 3. Execute generator script
-"${PYTHON_BIN}" "${ROOT_DIR}/scripts/record_judge_demo.py"
+"${PYTHON_BIN}" "${ROOT_DIR}/scripts/record_recoveryos_demo.py"
 
 # 4. Final verification
-if [ -f "${ROOT_DIR}/artifacts/recoveryos_judge_demo_silent.mp4" ]; then
-  echo "[✓] Final Silent Judge Video Created: artifacts/recoveryos_judge_demo_silent.mp4"
-  ls -lh "${ROOT_DIR}/artifacts/recoveryos_judge_demo_silent.mp4"
+if [ -f "${ROOT_DIR}/artifacts/recoveryos_demo_silent.mp4" ]; then
+  echo "[✓] Final Silent Demonstration Video Created: artifacts/recoveryos_demo_silent.mp4"
+  ls -lh "${ROOT_DIR}/artifacts/recoveryos_demo_silent.mp4"
 else
   echo "[!] Video file was not created."
   exit 1

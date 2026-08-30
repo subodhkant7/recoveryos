@@ -2024,3 +2024,378 @@ body.dark-theme {
   letter-spacing: 0.05em;
 }
 
+/* ==========================================================================
+   ENTERPRISE AGENT FLEET CONTROL PLANE MODAL STYLES
+   ========================================================================== */
+
+.fleet-modal {
+  max-width: 960px;
+  width: 95vw;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-subtitle {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+  display: block;
+  margin-top: 2px;
+}
+
+.fleet-modal-body {
+  overflow-y: auto;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.fleet-safety-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(14, 165, 233, 0.08);
+  border: 1px solid rgba(14, 165, 233, 0.3);
+  border-radius: 6px;
+  padding: 10px 14px;
+}
+
+.fleet-safety-banner .safety-icon {
+  font-size: 18px;
+}
+
+.fleet-safety-banner .safety-text {
+  font-size: 11.5px;
+  color: var(--text-main);
+  line-height: 1.4;
+}
+
+.fleet-stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.fleet-stat-pill {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fleet-stat-pill .stat-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-dim);
+  letter-spacing: 0.08em;
+}
+
+.fleet-stat-pill .stat-val {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.fleet-stat-pill .stat-val.online { color: var(--emerald-core); }
+.fleet-stat-pill .stat-val.cyan { color: var(--cyan-core); }
+.fleet-stat-pill .stat-val.purple { color: #c084fc; }
+.fleet-stat-pill .stat-val.amber { color: var(--amber-core); }
+
+.fleet-nav-tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 8px;
+}
+
+.fleet-tab {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.fleet-tab:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.fleet-tab.active {
+  color: var(--cyan-core);
+  background: rgba(0, 240, 255, 0.08);
+  border-color: rgba(0, 240, 255, 0.3);
+}
+
+.fleet-agent-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.fleet-agent-card {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: all 0.2s ease;
+}
+
+.fleet-agent-card:hover {
+  border-color: rgba(0, 240, 255, 0.4);
+  background: rgba(255, 255, 255, 0.04);
+  transform: translateY(-1px);
+}
+
+.agent-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.agent-card-name {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.agent-card-id {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--cyan-core);
+}
+
+.agent-status-badge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.agent-status-badge.active {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--emerald-core);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.agent-card-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.agent-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+}
+
+.agent-meta-tag {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: var(--text-dim);
+}
+
+.agent-meta-tag strong {
+  color: var(--text-main);
+}
+
+.routing-table-card {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.routing-table-header {
+  display: grid;
+  grid-template-columns: 2fr 1.5fr 1.5fr 1.5fr 1fr;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 800;
+  color: var(--text-dim);
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.routing-row {
+  display: grid;
+  grid-template-columns: 2fr 1.5fr 1.5fr 1.5fr 1fr;
+  padding: 10px 14px;
+  align-items: center;
+  font-size: 11px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.routing-row:last-child {
+  border-bottom: none;
+}
+
+.routing-row code {
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.routing-row .primary-agent { color: var(--cyan-core); }
+.routing-row .fallback-agent { color: var(--amber-core); }
+.routing-row .verify-agent { color: var(--emerald-core); }
+
+.trace-summary-header {
+  display: flex;
+  gap: 16px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.trace-event-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.trace-event-card {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 10px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.trace-event-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.trace-event-type {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--cyan-core);
+}
+
+.trace-event-detail {
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+.trace-event-right {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-dim);
+}
+
+.context-entry-card {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.context-entry-header {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+.context-entry-key {
+  font-weight: 700;
+  color: var(--cyan-core);
+}
+
+.context-entry-body pre {
+  background: rgba(0, 0, 0, 0.4);
+  padding: 8px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-main);
+  overflow-x: auto;
+}
+
+.security-proofs-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.security-proof-card {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.security-proof-card.allow { border-left: 3px solid var(--emerald-core); }
+.security-proof-card.deny { border-left: 3px solid #ef4444; }
+.security-proof-card.block { border-left: 3px solid var(--amber-core); }
+
+.sec-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sec-badge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.sec-badge.pass { background: rgba(16, 185, 129, 0.15); color: var(--emerald-core); }
+.sec-badge.fail { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+.sec-badge.block { background: rgba(245, 158, 11, 0.15); color: var(--amber-core); }
+
+.sec-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.sec-detail {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.sec-reason {
+  font-size: 10.5px;
+  color: var(--text-dim);
+}
+

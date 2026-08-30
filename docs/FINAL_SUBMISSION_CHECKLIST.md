@@ -39,13 +39,13 @@ This checklist certifies all product, autonomy, resilience, UI, security, and te
 
 ### 6. TESTING & VALIDATION
 - [x] **Full Regression Suite**: 377 passed, 15 skipped, 0 failed in clean environment.
-- [x] **Phase 33 Judge Attack Suite**: 16/16 tests passing (`tests/test_phase33_final_judge_attack.py`).
-- [x] **Phase 32 Demo Attack Suite**: 14/14 tests passing (`tests/test_phase32_demo_attack.py`).
+- [x] **Phase 33 Engineering Validation Suite**: 16/16 tests passing (`tests/test_phase33_final_judge_attack.py`).
+- [x] **Phase 32 Demonstration Validation Suite**: 14/14 tests passing (`tests/test_phase32_demo_attack.py`).
 - [x] **Phase 31 Adversarial Audit Suite**: 19/19 tests passing (`tests/test_phase31_adversarial_audit.py`).
 - [x] **Phase 30 Integration Suite**: 5/5 tests passing (`tests/test_phase30_final_integration.py`).
 
 ### 7. SUBMISSION & REPOSITORY HYGIENE
 - [x] **README Complete**: Clear architecture, invariants, local setup, and demo instructions.
-- [x] **Demo Script Complete**: 2.5-minute one-take presentation script (`docs/PHASE_33_FINAL_JUDGE_SCRIPT.md`).
-- [x] **Judge FAQ Complete**: 15 technical questions answered (`docs/FINAL_JUDGE_FAQ.md`).
+- [x] **Demo Script Complete**: 2.5-minute one-take presentation script (`docs/PHASE_33_DEMONSTRATION_SCRIPT.md`).
+- [x] **Technical FAQ Complete**: 15 technical questions answered (`docs/FINAL_TECHNICAL_FAQ.md`).
 - [x] **Git Cleanliness**: No untracked junk files or accidental production infrastructure changes.

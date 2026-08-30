@@ -1573,10 +1573,20 @@ function setupEventListeners() {
   // Demo Mode Toggle
   document.getElementById('btn-toggle-demo-mode')?.addEventListener('click', toggleDemoMode);
 
-  // View Fleet scroll helper
-  document.getElementById('btn-view-fleet')?.addEventListener('click', () => {
-    if (appState.isDemoMode) toggleDemoMode();
-    document.getElementById('incident-list-container')?.scrollIntoView({ behavior: 'smooth' });
+  // View Fleet Modal Trigger
+  document.getElementById('btn-view-fleet')?.addEventListener('click', openFleetModal);
+  document.getElementById('btn-close-fleet')?.addEventListener('click', closeFleetModal);
+  document.getElementById('btn-close-fleet-footer')?.addEventListener('click', closeFleetModal);
+
+  // Fleet Sub-tabs
+  document.querySelectorAll('.fleet-tab').forEach((tab) => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.fleet-tab').forEach((t) => t.classList.remove('active'));
+      document.querySelectorAll('.fleet-tab-pane').forEach((p) => p.classList.add('hidden'));
+      tab.classList.add('active');
+      const targetPane = document.getElementById(`fleet-pane-${tab.dataset.tab}`);
+      targetPane?.classList.remove('hidden');
+    });
   });
 
   // Graph Node Clicks -> Scroll to inspector question
@@ -1632,6 +1642,174 @@ function setupEventListeners() {
     appState.events = [];
     updateEventCount();
   });
+}
+
+// ==========================================================================
+// 15. Enterprise Agent Fleet Control Plane Modal Logic
+// ==========================================================================
+
+async function openFleetModal() {
+  const modal = document.getElementById('modal-fleet-view');
+  modal?.classList.remove('hidden');
+  await renderFleetModalData();
+}
+
+function closeFleetModal() {
+  document.getElementById('modal-fleet-view')?.classList.add('hidden');
+}
+
+async function renderFleetModalData() {
+  try {
+    // 1. Fetch Fleet Status & Agent Registry
+    const [statusRes, agentsRes, routingRes] = await Promise.all([
+      apiFetch('/api/fleet/status').catch(() => null),
+      apiFetch('/api/fleet/agents').catch(() => null),
+      apiFetch('/api/fleet/routing').catch(() => null),
+    ]);
+
+    if (statusRes) {
+      document.getElementById('fleet-status-text').textContent = statusRes.fleet_status || 'OPERATIONAL';
+      document.getElementById('fleet-total-agents').textContent = String(statusRes.total_agents || 7);
+      document.getElementById('fleet-total-depts').textContent = String(Object.keys(statusRes.departments || {}).length || 4);
+      document.getElementById('fleet-total-routes').textContent = String(statusRes.routing_table_size || 6);
+    }
+
+    if (agentsRes && agentsRes.agents) {
+      renderFleetAgentsGrid(agentsRes.agents);
+    }
+
+    if (routingRes && routingRes.routing_table) {
+      renderFleetRoutingTable(routingRes.routing_table);
+    }
+
+    // 2. Fetch Active Workflow Fleet Trace & Context if a workflow is active
+    if (appState.activeWorkflowId) {
+      const [traceRes, contextRes] = await Promise.all([
+        apiFetch(`/api/fleet/workflows/${appState.activeWorkflowId}/trace`).catch(() => null),
+        apiFetch(`/api/fleet/workflows/${appState.activeWorkflowId}/context`).catch(() => null),
+      ]);
+
+      renderFleetTrace(traceRes);
+      renderFleetContext(contextRes);
+    }
+  } catch (err) {
+    console.error('Failed to load fleet modal data:', err);
+  }
+}
+
+function renderFleetAgentsGrid(agents) {
+  const container = document.getElementById('fleet-agent-grid');
+  if (!container) return;
+
+  container.innerHTML = agents.map((agent) => {
+    const tools = (agent.allowed_tools || []).map((t) => `<span class="agent-meta-tag"><code>${escapeHtml(t)}</code></span>`).join('');
+    const scopes = (agent.allowed_data_scopes || []).map((s) => `<span class="agent-meta-tag"><strong>${escapeHtml(s)}</strong></span>`).join('');
+
+    return `
+      <div class="fleet-agent-card">
+        <div class="agent-card-header">
+          <div>
+            <div class="agent-card-name">${escapeHtml(agent.name)}</div>
+            <div class="agent-card-id">ID: ${escapeHtml(agent.agent_id)} • v${escapeHtml(agent.version)}</div>
+          </div>
+          <span class="agent-status-badge active">${escapeHtml(agent.status || 'ACTIVE')}</span>
+        </div>
+        <p class="agent-card-desc">${escapeHtml(agent.description)}</p>
+        <div class="agent-meta-row">
+          <span class="agent-meta-tag">DEPT: <strong>${escapeHtml(agent.department)}</strong></span>
+          <span class="agent-meta-tag">RUNTIME: <strong>${escapeHtml(agent.runtime)}</strong></span>
+          <span class="agent-meta-tag">TENANT: <strong>${escapeHtml(agent.tenant_scope)}</strong></span>
+        </div>
+        ${tools ? `<div class="agent-meta-row" style="margin-top:4px;"><span style="font-size:9px;color:var(--text-dim);width:100%;">ALLOWED TOOLS:</span>${tools}</div>` : ''}
+        ${scopes ? `<div class="agent-meta-row" style="margin-top:2px;"><span style="font-size:9px;color:var(--text-dim);width:100%;">DATA SCOPES:</span>${scopes}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+function renderFleetRoutingTable(routingTable) {
+  const container = document.getElementById('fleet-routing-list');
+  if (!container) return;
+
+  container.innerHTML = Object.entries(routingTable).map(([outcomeId, route]) => `
+    <div class="routing-row">
+      <span><code>${escapeHtml(outcomeId)}</code></span>
+      <span class="primary-agent"><code>${escapeHtml(route.primary || 'n/a')}</code></span>
+      <span class="fallback-agent"><code>${escapeHtml(route.fallback || 'n/a')}</code></span>
+      <span class="verify-agent"><code>${escapeHtml(route.verification || 'n/a')}</code></span>
+      <span><span class="v-pill pass" style="font-size:8.5px;">BOUNDED OCC</span></span>
+    </div>
+  `).join('');
+}
+
+function renderFleetTrace(traceData) {
+  const traceIdEl = document.getElementById('fleet-active-trace-id');
+  const wfIdEl = document.getElementById('fleet-active-wf-id');
+  const agentIdEl = document.getElementById('fleet-active-agent-id');
+  const timelineEl = document.getElementById('fleet-trace-timeline');
+
+  if (wfIdEl) wfIdEl.textContent = appState.activeWorkflowId ? appState.activeWorkflowId.slice(0, 16) : 'none';
+
+  if (!traceData || !traceData.events || traceData.events.length === 0) {
+    if (traceIdEl) traceIdEl.textContent = 'none';
+    if (agentIdEl) agentIdEl.textContent = 'none';
+    if (timelineEl) {
+      timelineEl.innerHTML = `
+        <div class="empty-feed">
+          <div class="empty-icon">📡</div>
+          <div class="empty-title">No Events in Current Workflow Trace</div>
+          <div class="empty-sub">Active workflow events will stream into this OpenTelemetry-compatible trace buffer.</div>
+        </div>
+      `;
+    }
+    return;
+  }
+
+  const latestEvent = traceData.events[traceData.events.length - 1];
+  if (traceIdEl) traceIdEl.textContent = traceData.trace_id || 'trace-active';
+  if (agentIdEl) agentIdEl.textContent = latestEvent?.agent_id || 'orchestrator';
+
+  if (timelineEl) {
+    timelineEl.innerHTML = traceData.events.map((evt) => `
+      <div class="trace-event-card">
+        <div class="trace-event-left">
+          <div class="trace-event-type">${escapeHtml(evt.event_type || 'SPAN')} • ${escapeHtml(evt.agent_id || 'system')}</div>
+          <div class="trace-event-detail">${escapeHtml(evt.detail || evt.tool || evt.decision || 'Execution span recorded')}</div>
+        </div>
+        <div class="trace-event-right">
+          <code>span:${escapeHtml((evt.span_id || '').slice(0, 8))}</code>
+        </div>
+      </div>
+    `).join('');
+  }
+}
+
+function renderFleetContext(contextData) {
+  const container = document.getElementById('fleet-context-container');
+  if (!container) return;
+
+  if (!contextData || !contextData.entries || contextData.entries.length === 0) {
+    container.innerHTML = `
+      <div class="empty-feed">
+        <div class="empty-icon">💾</div>
+        <div class="empty-title">No Durable Context For Active Workflow</div>
+        <div class="empty-sub">Structured state persisted across agent interruptions will appear here.</div>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = contextData.entries.map((entry) => `
+    <div class="context-entry-card">
+      <div class="context-entry-header">
+        <span class="context-entry-key">${escapeHtml(entry.key)} (v${escapeHtml(entry.context_version || 1)})</span>
+        <span class="agent-meta-tag">AGENT: <strong>${escapeHtml(entry.agent_id)}</strong> • SCOPE: <strong>${escapeHtml(entry.scope || 'workflow')}</strong></span>
+      </div>
+      <div class="context-entry-body">
+        <pre>${escapeHtml(JSON.stringify(entry.value, null, 2))}</pre>
+      </div>
+    </div>
+  `).join('');
 }
 
 function escapeHtml(str) {

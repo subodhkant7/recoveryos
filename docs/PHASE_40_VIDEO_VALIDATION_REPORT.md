@@ -1,17 +1,17 @@
 # Phase 40 — Video Validation Report
 
 **Verification Date:** August 28, 2026  
-**Target Video:** `artifacts/recoveryos_judge_demo_silent.mp4`  
+**Target Video:** `artifacts/recoveryos_demo_silent.mp4`
 **Overall Validation Status:** **14 / 14 CHECKS PASS**
 
 ---
 
-## 1. Compliance Matrix (14 Judge Invariants)
+## 1. Compliance Matrix (14 Engineering Invariants)
 
 | # | Validation Item | Requirement | Observed Metric / Evidence | Status |
 |---|---|---|---|:---:|
 | 1 | `REAL_APPLICATION_CAPTURED` | Captures authentic RecoveryOS UI & architecture | Exact Command Center layout, 5-stage orchestration graph, decision inspector, evidence-backed recovery proof | **PASS** |
-| 2 | `DETERMINISTIC_RECORDING` | Automated, reproducible pipeline script | `scripts/record_judge_demo.sh` runs autonomously with 0 human input | **PASS** |
+| 2 | `DETERMINISTIC_RECORDING` | Automated, reproducible pipeline script | `scripts/record_recoveryos_demo.sh` runs autonomously with 0 human input | **PASS** |
 | 3 | `BILLING_RECOVERY_VISIBLE` | Hero Scenario 01 demonstrated | Primary Stripe 500 failure → Gemini reasoning → Adyen failover captured at `0:32–1:24` | **PASS** |
 | 4 | `INDEPENDENT_VERIFICATION_VISIBLE` | Explicit distinction between execution and verification | `VERIFY` stage active probe (HTTP 200) + Invariant Proof bar shown at `1:24–1:42` | **PASS** |
 | 5 | `AUTONOMY_BOUNDARY_VISIBLE` | Scenario 02 bounded autonomy demonstrated | Experian (42) vs Equifax (88) contradiction halts agent at `1:42–2:24` | **PASS** |
@@ -23,14 +23,14 @@
 | 11 | `NO_FAKE_PRODUCT_STATE` | No simulated/mocked claims | States match exact backend transitions (`VALID_TRANSITIONS` in `backend/models/workflow.py`) | **PASS** |
 | 12 | `NO_SECRETS_EXPOSED` | Zero credentials in video or codebase | Clean token masks, zero real API keys exposed | **PASS** |
 | 13 | `VOICEOVER_SEPARATE` | Silent video ready for founder narration | Video contains no embedded voice audio track (pure visual stream) | **PASS** |
-| 14 | `REPRODUCIBLE_RECORDING` | Fully automated single-command rerun | `./scripts/record_judge_demo.sh` completes end-to-end in < 15 seconds | **PASS** |
+| 14 | `REPRODUCIBLE_RECORDING` | Fully automated single-command rerun | `./scripts/record_recoveryos_demo.sh` completes end-to-end in < 15 seconds | **PASS** |
 
 ---
 
 ## 2. Technical Stream Inspection (`ffprobe` / `ffmpeg`)
 
 ```text
-Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'artifacts/recoveryos_judge_demo_silent.mp4':
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'artifacts/recoveryos_demo_silent.mp4':
   Metadata:
     major_brand     : isom
     minor_version   : 512
@@ -63,4 +63,4 @@ Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'artifacts/recoveryos_judge_demo_silent.
 
 ## 4. Final Certification
 
-The silent judge demo video meets all hackathon guidelines, respects the strict 4-minute time cap, accurately reflects the production implementation, and is ready for narration.
+The silent demonstration video meets the defined presentation guidelines, respects the strict 4-minute time cap, accurately reflects the production implementation, and is ready for narration.

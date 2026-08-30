@@ -1438,8 +1438,17 @@ OUTCOME CONTRACT — Required Outcomes:
 
 
 # ---------------------------------------------------------------------------
+# Enterprise Agent Fleet Control Plane
+# ---------------------------------------------------------------------------
+
+from backend.api.fleet_routes import fleet_api_router  # noqa: E402
+app.include_router(fleet_api_router)
+
+
+# ---------------------------------------------------------------------------
 # Startup Recovery
 # ---------------------------------------------------------------------------
+
 
 
 async def recover_incomplete_workflows():
