@@ -311,33 +311,38 @@ class WorkflowEventConsumer:
                         agent_factory=self._agent_factory,
                     )
                     # If workflow entered RECOVERING and needs re-dispatching, publish RECOVERY_TRIGGER
-                    if isinstance(agent_result, dict) and agent_result.get("needs_redispatch") and self._event_publisher:
-                        wf_cur = await self._store.get_workflow(message.workflow_id)
-                        if wf_cur:
-                            attempts = wf_cur.get("recovery_attempts", 0)
-                            max_attempts = wf_cur.get("max_recovery_attempts", 3)
-                            if attempts < max_attempts and wf_cur.get("state") not in (WorkflowState.COMPLETED.value, WorkflowState.ESCALATED.value):
-                                cur_ver = wf_cur.get("version", 1)
-                                rec_msg = WorkflowExecutionMessage(
-                                    event_type=WorkflowEventType.RECOVERY_TRIGGER,
-                                    workflow_id=message.workflow_id,
-                                    tenant_id=message.tenant_id,
-                                    idempotency_key=f"op_auto_recover_{message.workflow_id}_v{cur_ver}",
-                                    expected_version=cur_ver,
-                                    correlation_id=message.correlation_id,
-                                    producer_id=f"recoveryos-worker-{self._worker_id}",
-                                    payload={"reason": f"Auto-recovery triggered after unverified outcomes (attempt {attempts}/{max_attempts})"},
-                                )
-                                await self._event_publisher.publish_workflow_execution(rec_msg)
-                                logger.info(f"Published auto-recovery message for workflow '{message.workflow_id}'")
-                            elif attempts >= max_attempts and wf_cur.get("state") == WorkflowState.RECOVERING.value:
-                                logger.warning(f"Recovery budget exhausted for workflow '{message.workflow_id}'. Escalating.")
-                                await self._engine.transition(
-                                    message.workflow_id,
-                                    WorkflowState.ESCALATED,
-                                    detail=f"Recovery budget exhausted ({attempts}/{max_attempts} attempts)",
-                                    actor="system",
-                                )
+                    if isinstance(agent_result, dict) and agent_result.get("needs_redispatch"):
+                        if not self._event_publisher:
+                            logger.error(
+                                f"Event publisher is not configured on worker; cannot publish auto-recovery message for workflow '{message.workflow_id}'"
+                            )
+                        else:
+                            wf_cur = await self._store.get_workflow(message.workflow_id)
+                            if wf_cur:
+                                attempts = wf_cur.get("recovery_attempts", 0)
+                                max_attempts = wf_cur.get("max_recovery_attempts", 3)
+                                if attempts < max_attempts and wf_cur.get("state") not in (WorkflowState.COMPLETED.value, WorkflowState.ESCALATED.value):
+                                    cur_ver = wf_cur.get("version", 1)
+                                    rec_msg = WorkflowExecutionMessage(
+                                        event_type=WorkflowEventType.RECOVERY_TRIGGER,
+                                        workflow_id=message.workflow_id,
+                                        tenant_id=message.tenant_id,
+                                        idempotency_key=f"op_auto_recover_{message.workflow_id}_v{cur_ver}",
+                                        expected_version=cur_ver,
+                                        correlation_id=message.correlation_id,
+                                        producer_id=f"recoveryos-worker-{self._worker_id}",
+                                        payload={"reason": f"Auto-recovery triggered after unverified outcomes (attempt {attempts}/{max_attempts})"},
+                                    )
+                                    await self._event_publisher.publish_workflow_execution(rec_msg)
+                                    logger.info(f"Published auto-recovery message for workflow '{message.workflow_id}'")
+                                elif attempts >= max_attempts and wf_cur.get("state") == WorkflowState.RECOVERING.value:
+                                    logger.warning(f"Recovery budget exhausted for workflow '{message.workflow_id}'. Escalating.")
+                                    await self._engine.transition(
+                                        message.workflow_id,
+                                        WorkflowState.ESCALATED,
+                                        detail=f"Recovery budget exhausted ({attempts}/{max_attempts} attempts)",
+                                        actor="system",
+                                    )
                 finally:
                     heartbeat_stop_event.set()
                     await asyncio.gather(heartbeat_task, return_exceptions=True)

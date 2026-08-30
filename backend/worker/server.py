@@ -56,6 +56,7 @@ from backend.engine.policy_engine import PolicyEngine
 from backend.simulation.failure_injector import FailureInjector
 from backend.simulation.external_services import SimulatedServices
 from backend.agents.agent_factory import AgentFactory
+from backend.events.publisher import create_event_publisher
 
 
 def get_worker_service() -> WorkflowWorkerService:
@@ -67,10 +68,12 @@ def get_worker_service() -> WorkflowWorkerService:
         services = SimulatedServices(injector)
         policy_engine = PolicyEngine()
         agent_factory = AgentFactory(store, engine, services, policy_engine)
+        event_publisher = create_event_publisher(config.event_publisher_backend)
         consumer = WorkflowEventConsumer(
             store=store,
             engine=engine,
             agent_factory=agent_factory,
+            event_publisher=event_publisher,
             worker_id=f"worker-{config.environment}",
         )
         validator = DefaultWorkerSecurityValidator()
