@@ -7,92 +7,107 @@
 
 RecoveryOS is the reliability and control layer for autonomous enterprise workflows. It detects a failure, lets an agent diagnose and propose a path, applies deterministic policy before any mutation, executes with idempotency and concurrency protection, then independently verifies the required business outcome. A tool response alone can never declare a workflow recovered.
 
+---
+
 ## 30-Second Explanation
 
 Enterprise agents can return `HTTP 200` while the business outcome remains broken. RecoveryOS closes that gap:
 
-`DETECT → DIAGNOSE → PLAN → POLICY → EXECUTE → INDEPENDENTLY VERIFY → RECOVER OR ESCALATE`
+$$\text{DETECT} \longrightarrow \text{DIAGNOSE} \longrightarrow \text{PLAN} \longrightarrow \text{POLICY} \longrightarrow \text{EXECUTE} \longrightarrow \text{INDEPENDENTLY VERIFY} \longrightarrow \text{RECOVER OR ESCALATE}$$
 
-Gemini supplies bounded reasoning inside a Google ADK agent runtime. RecoveryOS-native deterministic code remains the authority for policy, state transitions, idempotent execution, verification, and escalation.
+- **Gemini 3.5 Flash on Vertex AI** supplies bounded reasoning inside a **Google ADK** agent execution runtime.
+- **RecoveryOS-native deterministic code** remains the authoritative gate for policy, state transitions, idempotency, ground-truth outcome verification, and escalation.
 
-## Quickstart
+---
 
-1. Open the [canonical command center](https://recoveryos-321161003794.asia-east1.run.app/).
-2. Choose **Simulate an incident** → **Billing provider outage**.
-3. Follow the lifecycle: `CREATED • READY` → `EXECUTING • AGENT ACTIVE` → `VERIFYING • OUTCOME CHECK` → `RECOVERED • VERIFIED`.
-4. Inspect the Evidence-Backed Recovery Proof. It shows the workflow ID, action and action result separately, verification evidence IDs, required-outcome count, UTC completion time, and final lifecycle.
-5. Run **Contradictory evidence** to see policy stop autonomous execution at `AWAITING APPROVAL`; run **Worker interruption** to see an external write reconciled before a bounded redispatch.
-
-The demo scenarios use deterministic simulated enterprise services—no real billing provider is charged.
-
-## Why This Matters
-
-RecoveryOS is not another generic AI agent. An agent can reason and propose, but it is not allowed to declare a business outcome successful. RecoveryOS makes that a governed workflow:
-
-| Concern | Enforced by |
-| --- | --- |
-| Failure diagnosis and recovery proposal | Gemini 3.5 Flash on Vertex AI (with bounded Gemini 3.5 Flash Lite fallback) through Google ADK |
-| Authorization, safety limits, approvals | Deterministic `PolicyEngine` |
-| Duplicate side-effect protection | Canonical idempotency keys and operation claims |
-| Concurrent worker protection | Optimistic concurrency control and worker leases |
-| Recovery truth | Independent outcome probes and the outcome contract |
-| Failure boundary | Bounded retry, reconciliation, then human escalation |
-
-RecoveryOS uses Gemini 3.5 Flash on Vertex AI as its primary reasoning model, with Gemini 3.5 Flash Lite as a bounded fallback for retryable model availability/quota failures. Vertex AI authentication uses Google Cloud workload identity / Application Default Credentials rather than embedding model API keys.
-
-## Fortified Enterprise Fleet Alignment
-
-Enterprise fleets need a reliability layer around agent actions. RecoveryOS demonstrates that layer with:
-
-- policy-gated autonomous actions and human approval boundaries;
-- durable workflow lifecycle and append-only event history;
-- idempotent execution and operation claims to protect against duplicate work;
-- independent verification of every required business outcome;
-- recovery liveness, reconciliation after interruption, bounded retries, and escalation;
-- read-only historical replay and an evidence-backed recovery proof.
-
-The product’s central distinction is deliberate: an agent performs an action; **RecoveryOS determines whether that action actually recovered the required outcome**.
-
-## How Recovery Works
+## System Architecture
 
 ```mermaid
 flowchart TD
-    A[Enterprise failure signal] --> B[Cloud Pub/Sub ingestion]
-    B --> C[RecoveryOS API / worker on Cloud Run]
-    C --> D[Google ADK agent runtime]
-    D --> E[Gemini 3.5 Flash reasoning]
-    E --> F[Diagnosis and recovery plan]
-    F --> G{Deterministic policy engine}
-    G -- Allowed --> H[Idempotent action execution]
-    G -- Approval required --> I[AWAITING APPROVAL]
-    H --> J[Independent verification probe]
-    J --> K[Evidence persisted in Firestore]
-    K --> L{All required outcomes verified?}
-    L -- Yes --> M[RECOVERED • VERIFIED]
-    L -- No --> N[RECOVERING • AUTONOMOUS RETRY]
-    N --> G
-    I --> O[Human approves or rejects]
-    O --> H
-    O --> P[ESCALATED • HUMAN INTERVENTION]
+    User([User / API Request]) --> API[Cloud Run Control Plane]
+    API --> ADK[Google ADK Agent Runtime]
+    ADK --> Fleet[Fleet Gateway & Policy Engine]
+    Fleet --> Guard[Agent Guardrails & Identity]
+    Guard --> Mutate[Taskmaster Idempotent Mutation]
+    Mutate --> ExtSvc[(External Enterprise Services)]
+    ExtSvc --> Verifier[Independent Outcome Verifier]
+    Verifier --> Store[(Cloud Firestore Durable State)]
+    Store --> PubSub[Cloud Pub/Sub Messaging]
+    PubSub --> Worker[Cloud Run Asynchronous Worker]
+    Worker --> ADK
 ```
 
-Cloud Run is the deployment/runtime layer. Firestore stores workflow snapshots, evidence, audit history, idempotency records, and operation claims when `PERSISTENCE_BACKEND=firestore`. Pub/Sub is the asynchronous dispatch boundary when `EVENT_PUBLISHER_BACKEND=pubsub`.
+The system architecture diagrams are available as submission assets:
+- Architecture Blueprint: [`artifacts/recoveros-architecture.png`](artifacts/recoveros-architecture.png)
+- Thumbnail: [`artifacts/recoveros-thumbnail.png`](artifacts/recoveros-thumbnail.png)
+
+---
+
+## Division of Labor & Invariants
+
+RecoveryOS is not another generic AI wrapper. An agent can reason and propose, but it is not allowed to declare a business outcome successful. RecoveryOS enforces this as a governed workflow:
+
+| Concern | Enforced by |
+| --- | --- |
+| Failure diagnosis & recovery proposal | **Gemini 3.5 Flash on Vertex AI** (with bounded **Gemini 3.5 Flash Lite** fallback) through **Google ADK** |
+| Agent execution framework & tool calling | **Google ADK** (`LlmAgent`, `Runner`, sessions, tool definitions) |
+| Authorization, safety limits, human approvals | Deterministic `PolicyEngine` (`backend/engine/policy_engine.py`) |
+| Duplicate side-effect protection | Canonical idempotency keys and distributed operation claims |
+| Concurrent worker protection | Optimistic concurrency control (OCC) and worker lease heartbeats |
+| Recovery truth | Independent outcome probes and the typed `OutcomeContract` |
+| Failure boundary | Bounded recovery budget, authoritative reconciliation, then human escalation |
+
+---
+
+## Vertex AI & Model Fallback Semantics
+
+Production uses **Google Vertex AI** (`LLM_PROVIDER=vertex`, `GOOGLE_GENAI_USE_VERTEXAI=true`, `GOOGLE_CLOUD_LOCATION=global`) authenticated via **Google Cloud service identity / Application Default Credentials (ADC)** rather than embedding model API keys.
+
+### Critical Distinction: Model Failure vs. Business Failure
+
+Documentation and operational telemetry strictly separate model-level failures from business-level workflow failures:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 1. MODEL / PROVIDER FAILURE (HTTP 429, HTTP 503, Quota Exhaustion)          │
+│    └─► Resilient Gemini Runtime: Exponential backoff + single-attempt       │
+│        fallback from Gemini 3.5 Flash to Gemini 3.5 Flash Lite.             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ 2. BUSINESS / WORKFLOW FAILURE (Stripe 503, Contradictory Evidence,         │
+│    Policy Denial, OCC Conflict, Worker Interruption)                        │
+│    └─► Governed by RecoveryOS Engine: Diagnosis, alternative tool discovery,│
+│        policy evaluation, and independent verification.                     │
+│    └─► MUST NEVER trigger Gemini model fallback.                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+- **Model Fallback**: If Vertex AI returns retryable infrastructure errors (HTTP 429 rate limiting, HTTP 503 model unavailable, or quota exhaustion), `ResilientGemini` executes bounded exponential backoff with jitter and falls back to `gemini-3.5-flash-lite`.
+- **Business-Service Failures**: Failures in business tools (e.g. Stripe 503, PayPal failures, contradictory credit scores, policy blocks, guardrail denials, tenant mismatches, OCC version conflicts, or worker crashes) are standard domain events. They are diagnosed by the agent and governed by deterministic policy—**they do NOT trigger Gemini model fallback**.
+
+---
+
+## Role of Google ADK vs. RecoveryOS
+
+- **Google ADK**: Provides the agent runtime, `LlmAgent` declarations, structured tool-calling interface, conversation sessions, and the `Runner` loop.
+- **RecoveryOS**: Implements the deterministic control plane around ADK: the multi-agent fleet registry, zero-trust identity scopes, security gateway, deterministic policy engine, durable context store, Firestore persistence, Pub/Sub messaging, crash reconciliation, independent verification probes, and evidence collection. ADK does not perform persistence or outcome verification.
+
+---
 
 ## Enterprise Agent Fleet Control Plane
 
-RecoveryOS is a **multi-agent enterprise recovery control plane with explicit separation of concerns**:
+RecoveryOS implements a multi-agent enterprise recovery control plane with strict separation of concerns:
 
 ```
                   ENTERPRISE AGENT FLEET
                            │
                            ▼
-                    ORCHESTRATOR
+                    ORCHESTRATOR (ADK)
                            │
                 ┌──────────┴──────────┐
                 │                     │
                 ▼                     ▼
        TASKMASTER EXECUTION    RECOVERY SPECIALIST
-                │               READ-ONLY DIAGNOSIS
+        (Mutating Agent)       (Read-Only Diagnosis)
                 │                     │
                 │                     ▼
                 │              RECOVERY PLAN
@@ -104,7 +119,7 @@ RecoveryOS is a **multi-agent enterprise recovery control plane with explicit se
                            │
                     ┌──────┴──────┐
                     │             │
-                  IDENTITY     GUARDRAILS
+                 IDENTITY     GUARDRAILS
                     │             │
                     └──────┬──────┘
                            │
@@ -128,105 +143,146 @@ RecoveryOS is a **multi-agent enterprise recovery control plane with explicit se
 ```
 
 > **First-Party Equivalence Statement**:
-> RecoveryOS implements first-party equivalents for these enterprise agent capabilities rather than claiming integration with Gemini Enterprise Agent Platform products.
->
-> The current architecture uses a dedicated execution agent rather than one mutating LLM agent per domain. Domain agent identities define capability and data boundaries around the shared execution boundary.
+> RecoveryOS implements first-party equivalents for enterprise agent fleet capabilities rather than claiming integration with Gemini Enterprise Agent Platform (GEAP) products.
 
 ### Control Plane Subsystems
 
-1. **Orchestrator** ([`backend/agents/agent_factory.py`](backend/agents/agent_factory.py)): Top-level ADK coordinator managing sub-agent handoffs between execution and diagnosis.
+1. **Orchestrator** ([`backend/agents/agent_factory.py`](backend/agents/agent_factory.py)): Top-level Google ADK coordinator managing sub-agent handoffs between execution and diagnosis.
 2. **Recovery Specialist** ([`backend/agents/agent_factory.py`](backend/agents/agent_factory.py)): Dedicated read-only Gemini reasoning agent that diagnoses failures, queries service health, and creates structured `RecoveryPlan` objects.
 3. **Taskmaster** ([`backend/agents/agent_factory.py`](backend/agents/agent_factory.py)): Unified execution agent executing policy-gated mutations and approved recovery plans.
 4. **Independent Verification** ([`backend/tools/onboarding/tools.py`](backend/tools/onboarding/tools.py)): Deterministic query probes verifying ground-truth service state (`Action Executed ≠ Recovery Verified`).
 5. **Agent Registry** ([`backend/fleet/registry.py`](backend/fleet/registry.py)): Cross-department agent discovery with typed Agent Cards, versioning, capability declarations, allowed tools, and data scopes.
 6. **Agent Identity & Zero-Trust Scope** ([`backend/fleet/identity.py`](backend/fleet/identity.py)): Bound agent identities enforcing tenant isolation, role boundaries, and fine-grained data scopes before tool invocation.
 7. **Agent Gateway** ([`backend/fleet/gateway.py`](backend/fleet/gateway.py)): Centralized routing and policy boundary chaining agent identity checks, tenant/scope validation, deterministic policy rules, and structured security audit decisions.
-8. **Durable Agent Context** ([`backend/fleet/context_store.py`](backend/fleet/context_store.py)): Exact, structured, compliance-safe state persistence across extended timelines and worker interruption events.
+8. **Durable Agent Context** ([`backend/fleet/context_store.py`](backend/fleet/context_store.py)): Structured state persistence across extended timelines and worker interruption events.
 9. **RecoveryOS Agent Guardrails** ([`backend/fleet/guardrails.py`](backend/fleet/guardrails.py)): Deterministic safety inspector checking sensitive fields, prompt injection indicators, unknown tools, and unauthorized scopes before mutation.
 10. **Fleet Observability** ([`backend/fleet/observability.py`](backend/fleet/observability.py)): OpenTelemetry-compatible structured audit traces capturing W3C `trace_id`, `span_id`, `parent_span_id`, agent IDs, decisions, and tool executions.
 11. **Failure-Tolerant Inter-Agent Routing** ([`backend/fleet/routing.py`](backend/fleet/routing.py)): Explicit routing from primary specialist agents to fallback recovery agents within a bounded recovery budget to prevent unbounded loops.
 
-## Google Technology Used
+---
 
-- **Gemini 3.5 Flash** is configured centrally with `GEMINI_MODEL` in [`backend/config.py`](backend/config.py) and instantiated by [`backend/agents/agent_factory.py`](backend/agents/agent_factory.py). [`backend/llm/resilience.py`](backend/llm/resilience.py) wraps the ADK model with bounded retry, pacing, and circuit-breaking behavior.
-- **Google ADK** supplies `LlmAgent`, tools, agent delegation, sessions, and the `Runner` used by [`backend/engine/agent_runner.py`](backend/engine/agent_runner.py).
-- **Cloud Run** hosts the FastAPI control plane and the worker service.
-- **Cloud Firestore** is the durable workflow store implementation in [`backend/persistence/workflow_store.py`](backend/persistence/workflow_store.py).
-- **Cloud Pub/Sub** is the typed workflow-dispatch transport in [`backend/events/publisher.py`](backend/events/publisher.py) and [`backend/events/consumer.py`](backend/events/consumer.py).
+## Verified Scenario Behaviors
 
-RecoveryOS does **not** claim or integrate Gemini Enterprise Agent Platform (GEAP) services such as Agent Registry, Agent Runtime, Memory Bank, Agent Gateway, or Model Armor. Its policy engine, state machine, verification, recovery proof, retries, and replay are RecoveryOS-native capabilities.
+The live demonstration showcases three deterministic scenarios in a synthetic enterprise environment (no real credit cards or financial accounts are charged):
 
-## Killer Demo: Enterprise Billing Failure
+### 1. `billing_unavailable` (Autonomous Failover & Independent Verification)
+1. Primary billing provider (`stripe`) returns `HTTP 503 Service Unavailable`.
+2. Recovery Specialist diagnoses the outage, queries provider health, and discovers `paypal` as an available alternative.
+3. Recovery Specialist submits a structured `RecoveryPlan` proposing failover to PayPal.
+4. `PolicyEngine` evaluates the proposal against risk rules and grants autonomous approval.
+5. Taskmaster executes `setup_billing` with `provider="paypal"`, acquiring an operation claim and canonical idempotency key.
+6. Taskmaster initiates `verify_outcome` for `billing_configured`, issuing an independent query to confirm an active enterprise subscription.
+7. Remaining onboarding steps complete normally; workflow transitions to `RECOVERED • VERIFIED` (6/6 outcomes verified).
+8. Evidence-Backed Recovery Proof renders on the command center canvas.
 
-The primary `billing_unavailable` scenario is deterministic:
+### 2. `contradictory_evidence` (Governed Autonomy Boundary)
+1. `setup_billing` executes on Stripe and returns a tentative success message.
+2. Independent verification probe queries the billing service and detects that the subscription plan is actually `starter` rather than the required `enterprise`.
+3. Outcome verification marks `billing_configured = FAILED` with explicit discrepancy details.
+4. `PolicyEngine` halts autonomous execution due to contradictory evidence.
+5. Workflow transitions to `AWAITING_APPROVAL` and dispatches an approval request.
+6. **Autonomy is stopped**: The system does NOT automatically switch providers, retry, activate the account, or send welcome emails without human authorization.
+7. An authenticated human approver must explicitly review the discrepancy and decide whether to approve or escalate.
 
-1. The simulated primary billing provider returns `HTTP 503`.
-2. The ADK/Gemini workflow diagnoses the failure and proposes a healthy provider.
-3. The deterministic policy gate permits or blocks the proposed mutation.
-4. The action executes with a canonical idempotency key and operation claim.
-5. RecoveryOS enters `VERIFYING • OUTCOME CHECK`; it does not call the tool result recovery.
-6. A separate billing-state query validates the required plan and billing cycle.
-7. Only after every required outcome is independently verified does the workflow enter `RECOVERED • VERIFIED`.
+### 3. `worker_interruption` (Crash Reconciliation & Recovery Redispatch)
+1. External billing mutation succeeds on the target service.
+2. A simulated worker crash/interruption occurs before the local Firestore transaction commits.
+3. The worker's 60-second lease expires, leaving the workflow in an interrupted state.
+4. A replacement worker executes `reconcile_interrupted_workflow()`, checking external ground truth against the target service.
+5. Reconciliation confirms the external mutation succeeded, advances state to `RECOVERING`, and publishes a `RECOVERY_TRIGGER` event to Pub/Sub.
+6. Resumed worker picks up the workflow, executes independent outcome verification, and finishes the remaining steps without duplicating the billing mutation.
+7. Workflow completes with 6/6 verified outcomes.
 
-## Failure Scenarios
+---
 
-| Scenario | What it proves | Safe terminal/next state |
-| --- | --- | --- |
-| `billing_unavailable` | Provider failure can use policy-approved autonomous recovery, then independent verification. | `RECOVERED • VERIFIED` only after every outcome passes. |
-| `contradictory_evidence` | Injects contradictory billing evidence: the action reports success, but independent verification detects the wrong plan tier (expected: `enterprise`, actual: `starter`), resulting in `billing_configured = FAILED`. | `AWAITING APPROVAL` (governed autonomy boundary), then recovery or escalation after authenticated human sign-off. |
-| `worker_interruption` | A deterministic interruption after an external write but before local completion is reconciled against the authoritative service state. | `RECOVERING • AUTONOMOUS RETRY`, then verified recovery or escalation after the retry budget. |
+## Evidence-Backed Recovery Proof
 
-## Independent Verification and Recovery Proof
+The Command Center renders an **Evidence-Backed Recovery Proof** upon workflow completion. The proof dynamically correlates exact domain action and verification pairs from durable Firestore records:
 
-`OnboardingTools.verify_outcome` issues a separate query to the target service and persists `VERIFICATION` evidence. [`backend/engine/agent_runner.py`](backend/engine/agent_runner.py) allows the `COMPLETED` transition only when every `OutcomeContract` requirement is verified.
+- **Billing Action** (`setup_billing`) $\longleftrightarrow$ **Billing Verification** (`verify:billing_configured`)
+- **Identity Action** (`verify_identity`) $\longleftrightarrow$ **Identity Verification** (`verify:identity_verified`)
+- **Document Action** (`validate_documents`) $\longleftrightarrow$ **Document Verification** (`verify:documents_validated`)
+- **Risk Action** (`run_risk_check`) $\longleftrightarrow$ **Risk Verification** (`verify:risk_assessed`)
+- **Account Action** (`activate_account`) $\longleftrightarrow$ **Account Verification** (`verify:account_activated`)
+- **Welcome Action** (`send_welcome_package`) $\longleftrightarrow$ **Welcome Verification** (`verify:welcome_sent`)
 
-The console’s Evidence-Backed Recovery Proof is a read-only presentation of durable workflow data. It contains the workflow and incident, recorded actions and results, verification methods and evidence IDs, required-outcome result, timestamps, final lifecycle, and human intervention count. It is **not** cryptographically signed or tamper-evident, and it makes no such claim.
+> **Transparency Note**:
+> The Recovery Proof is an evidence-backed presentation of authoritative Firestore audit logs and outcome verification records. It is not cryptographically signed or presented as tamper-evident.
 
-## Source Code Map
+---
 
-| Component | Source |
-| --- | --- |
-| Lifecycle, contracts, transitions | [`backend/models/workflow.py`](backend/models/workflow.py), [`backend/engine/workflow_engine.py`](backend/engine/workflow_engine.py) |
-| ADK/Gemini agent construction | [`backend/agents/agent_factory.py`](backend/agents/agent_factory.py), [`backend/engine/agent_runner.py`](backend/engine/agent_runner.py) |
-| Policy and approval gate | [`backend/engine/policy_engine.py`](backend/engine/policy_engine.py) |
-| Idempotent tool execution and independent verification | [`backend/tools/onboarding/tools.py`](backend/tools/onboarding/tools.py) |
-| Firestore, OCC, claims, evidence | [`backend/persistence/workflow_store.py`](backend/persistence/workflow_store.py) |
-| Pub/Sub dispatch and worker processing | [`backend/events/publisher.py`](backend/events/publisher.py), [`backend/events/consumer.py`](backend/events/consumer.py) |
-| Operator command center and read-only replay | [`backend/api/static/index.html`](backend/api/static/index.html), [`backend/api/static/app.js`](backend/api/static/app.js) |
+## Local Setup & Development
 
-## Local Setup
+### 1. Prerequisites & Environment
 
 ```bash
+# Clone and enter directory
+cd "Recovery OS"
+
+# Create and activate virtual environment
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e '.[dev]'
+```
 
+### 2. Configure Vertex AI (Recommended)
+
+```bash
+# Authenticate with Google Cloud ADC
+gcloud auth application-default login
+
+# Configure Vertex AI environment
+export LLM_PROVIDER=vertex
+export GOOGLE_GENAI_USE_VERTEXAI=true
+export GOOGLE_CLOUD_PROJECT=your-gcp-project-id
+export GOOGLE_CLOUD_LOCATION=global
 export GEMINI_MODEL=gemini-3.5-flash
+export GEMINI_FALLBACK_MODEL=gemini-3.5-flash-lite
 export PERSISTENCE_BACKEND=in_memory
 export EVENT_PUBLISHER_BACKEND=in_memory
+```
+
+*Note for offline / API key development*: You can optionally configure `LLM_PROVIDER=gemini_api` and `GOOGLE_API_KEY=your_api_key`.
+
+### 3. Run Application Server
+
+```bash
 uvicorn backend.api.server:app --host 127.0.0.1 --port 8000
 ```
 
-Open `http://127.0.0.1:8000/`. Configure `GOOGLE_API_KEY` for live Gemini reasoning; the deterministic scenario and persistence layers remain separately testable without external services.
+Open [http://127.0.0.1:8000/](http://127.0.0.1:8000/) in your browser.
 
-For production, set a non-default `JWT_SECRET_KEY`, exact `CORS_ALLOW_ORIGINS`, `PERSISTENCE_BACKEND=firestore`, and the relevant Google Cloud credentials/project configuration. The application validates production configuration fail-closed at startup.
+---
 
-## Production Checks
+## Production Deployment & Verification
 
-Canonical URL: [https://recoveryos-321161003794.asia-east1.run.app/](https://recoveryos-321161003794.asia-east1.run.app/)
+- **Canonical URL**: [https://recoveryos-321161003794.asia-east1.run.app/](https://recoveryos-321161003794.asia-east1.run.app/)
+- **Compute**: Cloud Run (`asia-east1`)
+- **Persistence**: Cloud Firestore (`recoveryosdb`)
+- **Messaging**: Cloud Pub/Sub (`recoveryos-workflow-execution`)
+- **Reasoning**: Vertex AI (`gemini-3.5-flash` with `gemini-3.5-flash-lite` fallback)
 
 ```bash
+# Health probe (reports configured Gemini model and environment)
 curl -sS https://recoveryos-321161003794.asia-east1.run.app/api/health
+
+# Readiness probe (reports active persistence backend)
 curl -sS https://recoveryos-321161003794.asia-east1.run.app/api/ready
 ```
 
-The health endpoint reports the configured model and environment; the readiness endpoint reports the active persistence backend. The deprecated `recoveryos-aco6nasm7q-de.a.run.app` host is intentionally rejected in production.
+---
 
-## Testing
+## Testing & Quality Gates
+
+Run the comprehensive test suite (540+ automated tests across unit, integration, security, and fleet specifications):
 
 ```bash
-source .venv/bin/activate
-python -m pytest tests/ -v
-```
+# Full test suite
+uv run --no-sync pytest -q
 
-Key claim-protection coverage includes policy gates, independent verification, contradictory evidence, retry/liveness, idempotency, replay immutability, historical hydration, Cloud Run configuration, and frontend recovery-proof guards.
+# Fleet control plane tests
+uv run --no-sync pytest tests/test_fleet_*.py -q
+
+# Production acceptance suite (executes against live Cloud Run)
+uv run --no-sync pytest tests/test_production_acceptance_cloud_run.py -q
+```

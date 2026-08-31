@@ -82,8 +82,8 @@ The LLM does not own the state transition to `COMPLETED`. Deterministic Python a
 
 ---
 
-### 14. What is the biggest limitation of the current implementation?
-In unmocked live Gemini environments, unthrottled concurrent API calls can encounter Google Cloud project rate limits (HTTP 429). The system includes an in-memory execution mode and exponential backoff retry policies to guarantee reliable demonstration.
+### 14. How does RecoveryOS handle LLM rate limits and model outages?
+RecoveryOS uses Vertex AI with Gemini 3.5 Flash as its primary reasoning model. `ResilientGemini` (`backend/llm/resilience.py`) wraps the model with rate limiting, circuit breaking, exponential backoff with jitter, and an automatic single-attempt fallback to Gemini 3.5 Flash Lite on retryable model availability/quota errors. Business-service failures never trigger model fallback.
 
 ---
 

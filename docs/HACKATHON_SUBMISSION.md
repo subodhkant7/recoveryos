@@ -36,9 +36,9 @@ RecoveryOS provides the control and reliability layer an enterprise fleet needs 
 
 ## Google technologies used
 
-- **Gemini 3.5 Flash** (`GEMINI_MODEL`) for recovery reasoning.
+- **Vertex AI & Gemini 3.5 Flash** (`gemini-3.5-flash`) as primary reasoning model with **Gemini 3.5 Flash Lite** (`gemini-3.5-flash-lite`) as bounded fallback for retryable model/quota errors, authenticated via Application Default Credentials (ADC).
 - **Google ADK** for agents, delegated tools, sessions, and runner execution.
-- **Cloud Run** for the API and worker deployment runtime.
+- **Cloud Run** for the API and worker deployment runtime in `asia-east1`.
 - **Cloud Firestore** for durable workflow state, evidence, audit history, idempotency records, and operation claims.
 - **Cloud Pub/Sub** for asynchronous workflow dispatch and worker consumption.
 

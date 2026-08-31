@@ -15,7 +15,7 @@ RecoveryOS is a **multi-agent enterprise recovery control plane with explicit se
                   ENTERPRISE AGENT FLEET
                            │
                            ▼
-                    ORCHESTRATOR
+                    ORCHESTRATOR (ADK)
                            │
                 ┌──────────┴──────────┐
                 │                     │
@@ -55,6 +55,10 @@ RecoveryOS is a **multi-agent enterprise recovery control plane with explicit se
                   PROVE       RECOVER /
                               ESCALATE
 ```
+
+Submission assets:
+- Architecture Blueprint: [`artifacts/recoveros-architecture.png`](../artifacts/recoveros-architecture.png)
+- Thumbnail: [`artifacts/recoveros-thumbnail.png`](../artifacts/recoveros-thumbnail.png)
 
 ---
 
@@ -146,7 +150,16 @@ RecoveryOS implements first-party equivalents for enterprise agent fleet capabil
 
 ---
 
-## 5. Infrastructure & Runtime Architecture
+## 5. Model Fallback Semantics
+
+RecoveryOS strictly separates model-level infrastructure failures from business-level domain failures:
+
+- **Model Failures** (HTTP 429 rate limit, HTTP 503 model unavailable, quota exhaustion): Handled by `ResilientGemini` with exponential backoff and single-attempt fallback from `gemini-3.5-flash` to `gemini-3.5-flash-lite`.
+- **Business Failures** (Stripe 503, PayPal failures, contradictory evidence, verification failures, policy blocks, guardrail denials, tenant mismatches, OCC version conflicts, or worker crashes): Handled exclusively by the RecoveryOS deterministic engine. **They never trigger Gemini model fallback.**
+
+---
+
+## 6. Infrastructure & Runtime Architecture
 
 - **Reasoning**: RecoveryOS uses Gemini 3.5 Flash on Vertex AI as its primary reasoning model, with Gemini 3.5 Flash Lite as a bounded fallback for retryable model availability/quota failures. Vertex AI authentication uses Google Cloud workload identity / Application Default Credentials rather than embedding model API keys.
 - **Compute**: Cloud Run hosting FastAPI API server and asynchronous worker consumers in `asia-east1`.
