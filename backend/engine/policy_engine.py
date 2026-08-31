@@ -192,26 +192,35 @@ class PolicyEngine:
                             detail=f"REJECTED: Human rejected approval {app.get('approval_id')}: {app.get('decision_reason', 'Unauthorized')}",
                         )
 
-        # Look for contradictory evidence about billing
-        if tool_name in ("setup_billing", "verify_outcome"):
-            billing_evidence = [
-                e for e in evidence
-                if e.get("source", "").startswith("setup_billing")
-                or e.get("source", "").startswith("billing")
-            ]
-            if len(billing_evidence) >= 2:
-                plans = set()
-                for e in billing_evidence:
-                    data = e.get("data", {})
-                    plan = data.get("plan_tier") or data.get("plan")
-                    if plan:
-                        plans.add(plan)
-                if len(plans) > 1:
-                    return PolicyRuleResult(
-                        rule_name="evidence_consistency",
-                        passed=False,
-                        detail=f"REQUIRES_HUMAN: Contradictory billing evidence — plans found: {plans}",
-                    )
+        # Look for contradictory evidence across all evidence records and tools
+        billing_evidence = [
+            e for e in evidence
+            if e.get("source", "").startswith("setup_billing")
+            or e.get("source", "").startswith("billing")
+            or e.get("source", "").startswith("verify:billing_configured")
+            or e.get("source", "") == "verify_outcome"
+        ]
+        if billing_evidence:
+            plans = set()
+            for e in billing_evidence:
+                data = e.get("data", {})
+                plan = data.get("plan_tier") or data.get("plan")
+                if not plan and isinstance(data.get("raw_error"), dict):
+                    plan = data["raw_error"].get("plan_tier")
+                if plan:
+                    plans.add(plan)
+                # Check for explicit contradictory discrepancy text
+                discrepancies = data.get("discrepancies", [])
+                for d in discrepancies:
+                    if "contradictory" in str(d).lower() or ("plan" in str(d).lower() and ("expected" in str(d).lower() or "got" in str(d).lower())):
+                        plans.add("contradictory_discrepancy")
+
+            if len(plans) > 1 or "starter" in plans:
+                return PolicyRuleResult(
+                    rule_name="evidence_consistency",
+                    passed=False,
+                    detail=f"REQUIRES_HUMAN: Contradictory billing evidence — plans/discrepancies found: {plans}",
+                )
 
         return PolicyRuleResult(
             rule_name="evidence_consistency",

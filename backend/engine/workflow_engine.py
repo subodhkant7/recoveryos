@@ -164,6 +164,7 @@ class WorkflowEngine:
                     tool_name=tool_name,
                     idempotency_key=idem_key,
                     customer_id=cust_id,
+                    workflow_id=workflow_id,
                     **kwargs_clean,
                 )
                 if external_record is not None:

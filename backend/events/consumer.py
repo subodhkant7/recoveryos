@@ -213,10 +213,10 @@ class WorkflowEventConsumer:
         # 4. OCC Version Check & Execution Transition
         # ------------------------------------------------------------------
         current_version = wf.get("version", 1)
-        if current_version != message.expected_version:
+        if message.expected_version is not None and current_version != message.expected_version:
             record_occ_mismatch()
             logger.warning(
-                "OCC Version mismatch on event consumption",
+                "OCC version mismatch for workflow execution event",
                 extra={
                     "event_name": EVENT_WORKFLOW_OCC_MISMATCH,
                     "workflow_id": message.workflow_id,
@@ -263,7 +263,7 @@ class WorkflowEventConsumer:
                 if scenario_name and injector:
                     try:
                         from backend.simulation.scenarios import configure_demo_scenario
-                        configure_demo_scenario(injector, message.workflow_id, scenario_name)
+                        configure_demo_scenario(injector, message.workflow_id, scenario_name, services=services)
                         logger.info(
                             f"Auto-configured scenario '{scenario_name}' on worker",
                             extra={"workflow_id": message.workflow_id, "scenario": scenario_name},

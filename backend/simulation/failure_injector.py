@@ -105,6 +105,19 @@ class FailureInjector:
             CrashConfig(tool_name=tool_name, remaining_count=remaining_count)
         )
 
+    def has_failure_config(
+        self,
+        workflow_id: str,
+        tool_name: str,
+    ) -> bool:
+        """Return whether a failure injection was already configured.
+
+        Demo scenarios are configured by both the API and the worker. This guard
+        keeps a one-time failure deterministic instead of re-injecting the
+        same fault on every recovery dispatch (e.g. APPROVAL_RESUME).
+        """
+        return bool(self._configs.get((workflow_id, tool_name)))
+
     def has_crash_after_external_success_config(
         self,
         workflow_id: str,
@@ -223,6 +236,12 @@ def configure_scenario_2(injector: FailureInjector, workflow_id: str) -> None:
     Verification will catch the discrepancy. The policy engine
     will require human approval because evidence is contradictory.
     """
+    # Guard: don't re-inject if already configured (worker re-configures on each
+    # Pub/Sub message including APPROVAL_RESUME — without this guard the one-shot
+    # contradictory result keeps re-arming and the workflow loops forever).
+    if injector.has_failure_config(workflow_id, "setup_billing"):
+        return
+
     injector.configure_failure(
         workflow_id=workflow_id,
         tool_name="setup_billing",

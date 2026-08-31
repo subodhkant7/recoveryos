@@ -21,7 +21,7 @@ from backend.agents.agent_factory import AgentFactory
 from backend.events.consumer import WorkflowEventConsumer
 from backend.events.publisher import InMemoryEventPublisher
 from backend.events.message_models import WorkflowExecutionMessage, WorkflowEventType
-from backend.worker.service import WorkflowWorkerService, DeliveryStatus
+from backend.worker.service import WorkflowWorkerService, DeliveryStatus, FailureClassification
 from backend.worker.server import get_worker_service, set_worker_service
 
 
@@ -218,8 +218,10 @@ async def test_stale_occ_rejection_during_interruption_recovery():
     )
 
     result = await worker_service.process_message(stale_msg)
-    # Must be NACKed as RETRYABLE failure due to OCC version mismatch
+    # Stale messages (where workflow version has already advanced past expected_version)
+    # are rejected with NACK for retry/backoff.
     assert result.delivery_status == DeliveryStatus.NACK
+    assert result.failure_type == FailureClassification.RETRYABLE
 
     # Verify workflow version and state did not change
     after_wf = await store.get_workflow(wf_id)

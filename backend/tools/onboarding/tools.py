@@ -116,6 +116,7 @@ class OnboardingTools:
                 tool_name=tool_name,
                 idempotency_key=idempotency_key,
                 customer_id=target_entity_id,
+                workflow_id=workflow_id,
                 **kwargs_clean,
             )
             if external_record is not None:
@@ -572,11 +573,16 @@ class OnboardingTools:
                 workflow_id, step_id, result=verification_data, evidence_id=evidence_id
             )
         else:
+            is_contradictory = any(
+                "contradictory" in str(d).lower() or ("plan" in str(d).lower() and ("expected" in str(d).lower() or "got" in str(d).lower()))
+                for d in discrepancies
+            )
+
             failure_data = {
                 "failure_id": str(uuid.uuid4()),
                 "workflow_id": workflow_id,
                 "step_id": step_id,
-                "error_type": "VERIFICATION_FAILED",
+                "error_type": "CONTRADICTORY_EVIDENCE" if is_contradictory else "VERIFICATION_FAILED",
                 "error_detail": "; ".join(discrepancies) or f"Verification failed for outcome {outcome_id}",
                 "raw_error": verification_data,
                 "evidence_ids": [evidence_id],
@@ -589,6 +595,62 @@ class OnboardingTools:
                 error="; ".join(discrepancies) or f"Verification failed for {outcome_id}",
                 failure_data=failure_data,
             )
+
+            if is_contradictory:
+                # Deterministic deduplication key for approval request
+                from backend.models.approval import HumanApproval, ApprovalStatus
+                dedup_key = derive_idempotency_key(
+                    workflow_id=workflow_id,
+                    tool_name="verify_outcome",
+                    target_entity_id=customer_id,
+                    parameters={"outcome_id": outcome_id, "discrepancies": discrepancies},
+                )
+                existing = await self._store.get_pending_approval_by_dedup(workflow_id, dedup_key)
+                if not existing:
+                    approval = HumanApproval(
+                        workflow_id=workflow_id,
+                        action_tool="verify_outcome",
+                        action_args={"outcome_id": outcome_id, "customer_id": customer_id},
+                        policy_rule="evidence_consistency",
+                        reason=f"Verification detected contradictory evidence: {'; '.join(discrepancies)}",
+                        title=f"Approval Required: Contradictory Evidence in {outcome_id}",
+                        description=f"Action result contradicted by independent verification. Human authorization required to proceed.",
+                        dedup_key=dedup_key,
+                        status=ApprovalStatus.PENDING,
+                        evidence_ids=[evidence_id],
+                    )
+                    await self._store.save_approval(workflow_id, approval.model_dump(mode="json"))
+
+                    await self._engine._record_event(
+                        workflow_id=workflow_id,
+                        event_type=EventType.APPROVAL_REQUESTED,
+                        title=f"Approval Requested: Contradictory Evidence in {outcome_id}",
+                        detail=f"Verification detected contradictory evidence: {'; '.join(discrepancies)}",
+                        payload={
+                            "approval_id": approval.approval_id,
+                            "outcome_id": outcome_id,
+                            "discrepancies": discrepancies,
+                            "policy_rule": "evidence_consistency",
+                        },
+                        actor="verifier",
+                    )
+
+                # Halt workflow autonomy: pause in AWAITING_APPROVAL
+                wf_cur = await self._store.get_workflow(workflow_id)
+                cur_state = wf_cur.get("state") if wf_cur else None
+                if cur_state == WorkflowState.CREATED.value:
+                    await self._engine.transition(
+                        workflow_id,
+                        WorkflowState.EXECUTING,
+                        detail="Transitioning CREATED to EXECUTING before approval pause",
+                        actor="verifier",
+                    )
+                await self._engine.transition(
+                    workflow_id,
+                    WorkflowState.AWAITING_APPROVAL,
+                    detail=f"Paused: Contradictory evidence detected in {outcome_id} ({'; '.join(discrepancies)})",
+                    actor="verifier",
+                )
 
         return verification_data
 
@@ -730,7 +792,9 @@ class OnboardingTools:
             evidence=evidence_data,
             discrepancies=discrepancies or [],
         )
-        return result.model_dump(mode="json")
+        d = result.model_dump(mode="json")
+        d["outcome_id"] = outcome_id
+        return d
 
     # ------------------------------------------------------------------
     # Recovery Planning Tools

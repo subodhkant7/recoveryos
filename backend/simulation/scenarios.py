@@ -125,8 +125,19 @@ def configure_demo_scenario(
     injector: FailureInjector,
     workflow_id: str,
     scenario_name: str,
+    services: Any | None = None,
+    reset_state: bool = False,
 ) -> None:
-    """Configure failure injection for a named demo scenario."""
+    """Configure failure injection and isolated service state for a named demo scenario."""
+    if services is not None and hasattr(services, "configure_billing_provider"):
+        if reset_state and hasattr(services, "reset_for_workflow"):
+            services.reset_for_workflow(workflow_id)
+        if scenario_name == "billing_unavailable":
+            services.configure_billing_provider("stripe", status="down")
+        else:
+            services.configure_billing_provider("stripe", status="healthy")
+            services.configure_billing_provider("paypal", status="healthy")
+
     scenarios = {
         "billing_unavailable": configure_scenario_1,
         "contradictory_evidence": configure_scenario_2,

@@ -55,6 +55,46 @@ class SimulatedServices:
     def failure_injector(self) -> FailureInjector:
         return self._injector
 
+    def reset_for_workflow(self, workflow_id: str | None = None) -> None:
+        """Reset external services state and health status for deterministic scenario isolation."""
+        if workflow_id:
+            self._identity_records.pop(workflow_id, None)
+            self._document_records.pop(workflow_id, None)
+            self._risk_records.pop(workflow_id, None)
+            self._billing_records.pop(workflow_id, None)
+            self._account_records.pop(workflow_id, None)
+            self._notification_records.pop(workflow_id, None)
+            # Also clean up any customer-keyed records belonging to this workflow
+            for d in (self._identity_records, self._document_records, self._risk_records,
+                      self._billing_records, self._account_records, self._notification_records):
+                keys_to_del = [k for k, v in d.items() if isinstance(v, dict) and v.get("workflow_id") == workflow_id]
+                for k in keys_to_del:
+                    d.pop(k, None)
+            # Clean up operations for this workflow
+            op_keys_to_del = [k for k, v in self._operations_by_key.items() if isinstance(v, dict) and v.get("workflow_id") == workflow_id]
+            for k in op_keys_to_del:
+                self._operations_by_key.pop(k, None)
+        else:
+            self._identity_records.clear()
+            self._document_records.clear()
+            self._risk_records.clear()
+            self._billing_records.clear()
+            self._account_records.clear()
+            self._notification_records.clear()
+            self._operations_by_key.clear()
+
+        # Reset baseline service health
+        self._service_status = {
+            "identity": {"status": "healthy", "latency_ms": 120},
+            "documents": {"status": "healthy", "latency_ms": 200},
+            "risk": {"status": "healthy", "latency_ms": 350},
+            "billing_stripe": {"status": "healthy", "latency_ms": 180},
+            "billing_paypal": {"status": "healthy", "latency_ms": 220},
+            "billing_square": {"status": "healthy", "latency_ms": 250},
+            "accounts": {"status": "healthy", "latency_ms": 90},
+            "notifications": {"status": "healthy", "latency_ms": 150},
+        }
+
     # ------------------------------------------------------------------
     # Authoritative External State Reconciliation
     # ------------------------------------------------------------------
@@ -64,24 +104,29 @@ class SimulatedServices:
         tool_name: str,
         idempotency_key: str,
         customer_id: str,
+        workflow_id: str | None = None,
         **kwargs: Any,
     ) -> dict[str, Any] | None:
         """
         Query authoritative external state to check if mutation already occurred.
 
-        Used when local state is unknown or after process crash.
+        Used when local state is unknown or after process crash. Strictly scoped
+        to the target workflow to guarantee deterministic scenario isolation.
         """
-        # 1. Direct idempotency key match
+        # 1. Direct idempotency key match (must match target workflow if specified)
         if idempotency_key in self._operations_by_key:
             rec = self._operations_by_key[idempotency_key]
-            return {**rec, "status": "success", "reconciled": True}
+            if not workflow_id or rec.get("workflow_id") == workflow_id:
+                return {**rec, "status": "success", "reconciled": True}
 
-        # 2. Domain-specific entity inspection (scoped to current workflow)
-        target_wf_id = kwargs.get("workflow_id")
+        # 2. Domain-specific entity inspection (strictly scoped to target workflow)
+        target_wf_id = workflow_id or kwargs.get("workflow_id")
+        if not target_wf_id:
+            return None
 
         if tool_name == "setup_billing":
             rec = self._billing_records.get(customer_id)
-            if rec and (not target_wf_id or rec.get("workflow_id") == target_wf_id):
+            if rec and rec.get("workflow_id") == target_wf_id:
                 provider = kwargs.get("provider", "stripe")
                 plan_tier = kwargs.get("plan_tier", "enterprise")
                 billing_cycle = kwargs.get("billing_cycle", "monthly")
@@ -94,27 +139,27 @@ class SimulatedServices:
 
         elif tool_name == "verify_identity":
             rec = self._identity_records.get(customer_id)
-            if rec and (not target_wf_id or rec.get("workflow_id") == target_wf_id):
+            if rec and rec.get("workflow_id") == target_wf_id:
                 return {**rec, "status": "success", "reconciled": True}
 
         elif tool_name == "validate_documents":
             rec = self._document_records.get(customer_id)
-            if rec and (not target_wf_id or rec.get("workflow_id") == target_wf_id):
+            if rec and rec.get("workflow_id") == target_wf_id:
                 return {**rec, "status": "success", "reconciled": True}
 
         elif tool_name == "run_risk_check":
             rec = self._risk_records.get(customer_id)
-            if rec and (not target_wf_id or rec.get("workflow_id") == target_wf_id):
+            if rec and rec.get("workflow_id") == target_wf_id:
                 return {**rec, "status": "success", "reconciled": True}
 
         elif tool_name == "activate_account":
             rec = self._account_records.get(customer_id)
-            if rec and (not target_wf_id or rec.get("workflow_id") == target_wf_id):
+            if rec and rec.get("workflow_id") == target_wf_id:
                 return {**rec, "status": "success", "reconciled": True}
 
         elif tool_name == "send_welcome_package":
             rec = self._notification_records.get(customer_id)
-            if rec and (not target_wf_id or rec.get("workflow_id") == target_wf_id):
+            if rec and rec.get("workflow_id") == target_wf_id:
                 return {**rec, "status": "success", "reconciled": True}
 
         return None
@@ -171,11 +216,11 @@ class SimulatedServices:
         return {**record, "status": "success"}
 
     async def query_identity_status(
-        self, customer_id: str,
+        self, customer_id: str, workflow_id: str | None = None,
     ) -> dict[str, Any]:
         """Independent verification: query identity service by customer ID."""
         record = self._identity_records.get(customer_id)
-        if not record:
+        if not record or (workflow_id and record.get("workflow_id") != workflow_id):
             return {"found": False, "status": "not_found", "customer_id": customer_id}
         return {"found": True, **record}
 
@@ -216,11 +261,11 @@ class SimulatedServices:
         return {**record, "status": "success"}
 
     async def query_document_status(
-        self, customer_id: str,
+        self, customer_id: str, workflow_id: str | None = None,
     ) -> dict[str, Any]:
         """Independent verification: query document service by customer ID."""
         record = self._document_records.get(customer_id)
-        if not record:
+        if not record or (workflow_id and record.get("workflow_id") != workflow_id):
             return {"found": False, "status": "not_found", "customer_id": customer_id}
         return {"found": True, **record}
 
@@ -261,11 +306,11 @@ class SimulatedServices:
         return {**record, "status": "success"}
 
     async def query_risk_status(
-        self, customer_id: str,
+        self, customer_id: str, workflow_id: str | None = None,
     ) -> dict[str, Any]:
         """Independent verification: query risk service by customer ID."""
         record = self._risk_records.get(customer_id)
-        if not record:
+        if not record or (workflow_id and record.get("workflow_id") != workflow_id):
             return {"found": False, "status": "not_found", "customer_id": customer_id}
         return {"found": True, **record}
 
@@ -338,11 +383,11 @@ class SimulatedServices:
         return {**record, "status": "success"}
 
     async def query_billing_status(
-        self, customer_id: str,
+        self, customer_id: str, workflow_id: str | None = None,
     ) -> dict[str, Any]:
         """Independent verification: query billing for active subscription."""
         record = self._billing_records.get(customer_id)
-        if not record:
+        if not record or (workflow_id and record.get("workflow_id") != workflow_id):
             return {"found": False, "status": "not_found", "customer_id": customer_id}
         return {"found": True, **record}
 
@@ -381,11 +426,11 @@ class SimulatedServices:
         return {**record, "status": "success"}
 
     async def query_account_status(
-        self, customer_id: str,
+        self, customer_id: str, workflow_id: str | None = None,
     ) -> dict[str, Any]:
         """Independent verification: query account status."""
         record = self._account_records.get(customer_id)
-        if not record:
+        if not record or (workflow_id and record.get("workflow_id") != workflow_id):
             return {"found": False, "status": "not_found", "customer_id": customer_id}
         return {"found": True, **record}
 

@@ -185,7 +185,7 @@ async def run_workflow_agent(
         if scenario_name and injector:
             try:
                 from backend.simulation.scenarios import configure_demo_scenario
-                configure_demo_scenario(injector, workflow_id, scenario_name)
+                configure_demo_scenario(injector, workflow_id, scenario_name, services=services)
             except Exception as e:
                 logger.warning(f"Could not configure scenario '{scenario_name}' on runner: {e}")
 

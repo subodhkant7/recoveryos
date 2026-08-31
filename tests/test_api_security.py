@@ -453,3 +453,196 @@ async def test_auth_20_policy_engine_invariants_preserved():
         contract=contract,
     )
     assert eval_result.outcome == PolicyOutcome.REJECTED
+
+
+@pytest.mark.asyncio
+async def test_authorized_same_tenant_can_approve(approver_token):
+    """Authorized approver in the same tenant can approve pending workflow."""
+    wf_id = str(uuid.uuid4())
+    appr_id = f"appr-{uuid.uuid4().hex[:8]}"
+    await srv.store.save_workflow({
+        "workflow_id": wf_id,
+        "tenant_id": "tenant-acme",
+        "state": WorkflowState.AWAITING_APPROVAL.value,
+        "version": 1,
+    })
+    await srv.store.save_approval(wf_id, {
+        "approval_id": appr_id,
+        "workflow_id": wf_id,
+        "status": "PENDING",
+        "action_tool": "setup_billing",
+        "action_args": {"customer_id": "acme-001", "provider": "paypal"},
+    })
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        headers = {"Authorization": f"Bearer {approver_token}"}
+        resp = await client.post(
+            f"/api/workflows/{wf_id}/approve/{appr_id}",
+            json={"approved": True, "reason": "Authorized human decision"},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "decided"
+        assert data["approved"] is True
+        assert data["decided_by"] == "user_approver"
+
+    appr = await srv.store.get_approval(wf_id, appr_id)
+    assert appr["status"] == "APPROVED"
+    assert appr["decided_by"] == "user_approver"
+
+
+@pytest.mark.asyncio
+async def test_authorized_same_tenant_can_reject(approver_token):
+    """Authorized approver in the same tenant can reject pending workflow and escalate."""
+    wf_id = str(uuid.uuid4())
+    appr_id = f"appr-{uuid.uuid4().hex[:8]}"
+    await srv.store.save_workflow({
+        "workflow_id": wf_id,
+        "tenant_id": "tenant-acme",
+        "state": WorkflowState.AWAITING_APPROVAL.value,
+        "version": 1,
+    })
+    await srv.store.save_approval(wf_id, {
+        "approval_id": appr_id,
+        "workflow_id": wf_id,
+        "status": "PENDING",
+        "action_tool": "setup_billing",
+        "action_args": {"customer_id": "acme-001", "provider": "paypal"},
+    })
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        headers = {"Authorization": f"Bearer {approver_token}"}
+        resp = await client.post(
+            f"/api/workflows/{wf_id}/approve/{appr_id}",
+            json={"approved": False, "reason": "Operator rejected risky action"},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "decided"
+        assert data["approved"] is False
+        assert data["decided_by"] == "user_approver"
+
+    wf = await srv.store.get_workflow(wf_id)
+    assert wf["state"] == WorkflowState.ESCALATED.value
+    appr = await srv.store.get_approval(wf_id, appr_id)
+    assert appr["status"] == "REJECTED"
+
+
+@pytest.mark.asyncio
+async def test_unauthorized_role_cannot_approve(operator_token, viewer_token):
+    """Operators and Viewers cannot submit approvals."""
+    wf_id = str(uuid.uuid4())
+    appr_id = f"appr-{uuid.uuid4().hex[:8]}"
+    await srv.store.save_workflow({
+        "workflow_id": wf_id,
+        "tenant_id": "tenant-acme",
+        "state": WorkflowState.AWAITING_APPROVAL.value,
+        "version": 1,
+    })
+    await srv.store.save_approval(wf_id, {
+        "approval_id": appr_id,
+        "workflow_id": wf_id,
+        "status": "PENDING",
+    })
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # Operator attempt
+        resp_op = await client.post(
+            f"/api/workflows/{wf_id}/approve/{appr_id}",
+            json={"approved": True},
+            headers={"Authorization": f"Bearer {operator_token}"},
+        )
+        assert resp_op.status_code == 403
+        assert "Insufficient permissions" in resp_op.text
+
+        # Viewer attempt
+        resp_vi = await client.post(
+            f"/api/workflows/{wf_id}/approve/{appr_id}",
+            json={"approved": True},
+            headers={"Authorization": f"Bearer {viewer_token}"},
+        )
+        assert resp_vi.status_code == 403
+        assert "Insufficient permissions" in resp_vi.text
+
+
+@pytest.mark.asyncio
+async def test_cross_tenant_approval_is_denied():
+    """Approver from a different tenant is denied approval on another tenant's workflow."""
+    wf_id = str(uuid.uuid4())
+    appr_id = f"appr-{uuid.uuid4().hex[:8]}"
+    await srv.store.save_workflow({
+        "workflow_id": wf_id,
+        "tenant_id": "tenant-acme",
+        "state": WorkflowState.AWAITING_APPROVAL.value,
+        "version": 1,
+    })
+    await srv.store.save_approval(wf_id, {
+        "approval_id": appr_id,
+        "workflow_id": wf_id,
+        "status": "PENDING",
+    })
+
+    other_tenant_approver = create_access_token(
+        user_id="user_approver_corp",
+        role=Role.APPROVER,
+        tenant_id="tenant-corp",
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            f"/api/workflows/{wf_id}/approve/{appr_id}",
+            json={"approved": True, "reason": "Malicious cross-tenant attempt"},
+            headers={"Authorization": f"Bearer {other_tenant_approver}"},
+        )
+        assert resp.status_code == 403
+        assert "Cross-tenant access forbidden" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_approval_does_not_bypass_verification(approver_token):
+    """Approving an action does not automatically mark the outcome verified."""
+    wf_id = str(uuid.uuid4())
+    appr_id = f"appr-{uuid.uuid4().hex[:8]}"
+    contract = {
+        "workflow_id": wf_id,
+        "required_outcomes": [
+            {
+                "outcome_id": "billing_configured",
+                "description": "Billing active",
+                "acceptance_criteria": {"plan_tier": "enterprise"},
+                "verification_method": "query_billing_service",
+                "required_evidence": ["subscription_id"],
+                "status": "UNVERIFIED",
+            }
+        ],
+        "constraints": [],
+        "prohibited_outcomes": [],
+    }
+    await srv.store.save_workflow({
+        "workflow_id": wf_id,
+        "tenant_id": "tenant-acme",
+        "state": WorkflowState.AWAITING_APPROVAL.value,
+        "contract": contract,
+        "version": 1,
+    })
+    await srv.store.save_approval(wf_id, {
+        "approval_id": appr_id,
+        "workflow_id": wf_id,
+        "status": "PENDING",
+        "action_tool": "setup_billing",
+    })
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            f"/api/workflows/{wf_id}/approve/{appr_id}",
+            json={"approved": True, "reason": "Approved by human"},
+            headers={"Authorization": f"Bearer {approver_token}"},
+        )
+        assert resp.status_code == 200
+
+    wf = await srv.store.get_workflow(wf_id)
+    # Outcome must remain UNVERIFIED until independent verification executes
+    outcomes = wf["contract"]["required_outcomes"]
+    assert outcomes[0]["status"] == "UNVERIFIED"

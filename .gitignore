@@ -43,3 +43,5 @@ ui-debug.log
 artifacts/
 google-cloud-sdk/
 recordings/
+scratch/
+

@@ -86,7 +86,11 @@ class AuthenticationProvider:
             ("approver-1", "ApproverSecurePass!2026", Role.APPROVER, "tenant-default"),
             ("viewer-1", "ViewerSecurePass!2026", Role.VIEWER, "tenant-default"),
             ("operator-acme", "AcmeSecurePass!2026", Role.OPERATOR, "tenant-acme"),
+            ("approver-acme", "AcmeSecurePass!2026", Role.APPROVER, "tenant-acme"),
             ("operator-alice", "OperatorSecurePass!2026", Role.OPERATOR, "tenant-corp"),
+            ("approver-alice", "ApproverSecurePass!2026", Role.APPROVER, "tenant-corp"),
+            ("operator-globex", "GlobexSecurePass!2026", Role.OPERATOR, "tenant-globex"),
+            ("approver-globex", "GlobexSecurePass!2026", Role.APPROVER, "tenant-globex"),
         ]
 
         for username, pwd, role, tenant in default_accounts:
