@@ -10,6 +10,7 @@ const appState = {
     persona: 'operator',
     tenant: 'tenant-default',
     token: null,
+    password: null,
     refreshToken: null,
     refreshPromise: null,
     authExpired: false,
@@ -66,15 +67,35 @@ async function getAuthToken() {
 
   if (!token) {
     try {
-      const res = await fetch('/api/auth/login', {
+      let password = appState.auth.password || '';
+      let res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           username: username,
           role: p.role,
           tenant_id: tenant,
+          password: password,
         }),
       });
+
+      if (res.status === 401 && !password && typeof window !== 'undefined' && window.prompt) {
+        const entered = window.prompt(`Production authentication required for ${username}. Please enter password:`);
+        if (entered) {
+          appState.auth.password = entered;
+          password = entered;
+          res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              username: username,
+              role: p.role,
+              tenant_id: tenant,
+              password: password,
+            }),
+          });
+        }
+      }
 
       if (res.ok) {
         const data = await res.json();
@@ -106,15 +127,35 @@ async function getApproverAuthToken() {
   let token = sessionStorage.getItem(cacheKey);
   if (!token) {
     try {
-      const res = await fetch('/api/auth/login', {
+      let password = appState.auth.password || '';
+      let res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           username: approverUser,
           role: 'approver',
           tenant_id: tenant,
+          password: password,
         }),
       });
+
+      if (res.status === 401 && !password && typeof window !== 'undefined' && window.prompt) {
+        const entered = window.prompt(`Production authentication required for ${approverUser}. Please enter password:`);
+        if (entered) {
+          password = entered;
+          res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              username: approverUser,
+              role: 'approver',
+              tenant_id: tenant,
+              password: password,
+            }),
+          });
+        }
+      }
+
       if (res.ok) {
         const data = await res.json();
         token = data.access_token;
@@ -200,11 +241,24 @@ function clearAuthState(showMessage = true) {
 
 async function loginForSession() {
   const p = PERSONAS[appState.auth.persona] || PERSONAS.operator;
-  const res = await fetch('/api/auth/login', {
+  let password = appState.auth.password || '';
+  let res = await fetch('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: p.username, role: p.role, tenant_id: appState.auth.tenant }),
+    body: JSON.stringify({ username: p.username, role: p.role, tenant_id: appState.auth.tenant, password: password }),
   });
+  if (res.status === 401 && !password && typeof window !== 'undefined' && window.prompt) {
+    const entered = window.prompt(`Production authentication required for ${p.username}. Please enter password:`);
+    if (entered) {
+      appState.auth.password = entered;
+      password = entered;
+      res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: p.username, role: p.role, tenant_id: appState.auth.tenant, password: password }),
+      });
+    }
+  }
   if (!res.ok) {
     const detail = await res.json().catch(() => ({}));
     throw new Error(detail.detail || `HTTP ${res.status}`);
@@ -1729,12 +1783,14 @@ function setupEventListeners() {
   // Persona / Tenant Change
   document.getElementById('persona-select')?.addEventListener('change', (e) => {
     appState.auth.persona = e.target.value;
+    appState.auth.password = null;
     sessionStorage.clear();
     refreshFleetData();
   });
 
   document.getElementById('tenant-select')?.addEventListener('change', (e) => {
     appState.auth.tenant = e.target.value;
+    appState.auth.password = null;
     sessionStorage.clear();
     refreshFleetData();
   });

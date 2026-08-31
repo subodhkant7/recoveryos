@@ -217,7 +217,8 @@ The Command Center renders an **Evidence-Backed Recovery Proof** upon workflow c
 
 ```bash
 # Clone and enter directory
-cd "Recovery OS"
+git clone https://github.com/subodhkant7/recoveryos.git
+cd recoveryos
 
 # Create and activate virtual environment
 python3 -m venv .venv
@@ -274,7 +275,7 @@ curl -sS https://recoveryos-321161003794.asia-east1.run.app/api/ready
 
 ## Testing & Quality Gates
 
-Run the comprehensive test suite (540+ automated tests across unit, integration, security, and fleet specifications):
+Run the comprehensive test suite (550 automated tests across unit, integration, security, and fleet specifications; 531 passed, 19 skipped offline):
 
 ```bash
 # Full test suite

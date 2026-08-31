@@ -82,11 +82,11 @@ async def test_scenario_launch_succeeds_after_access_token_renewal(client, scena
 async def test_sse_ticket_can_be_issued_after_access_token_renewal(client):
     refresh = create_refresh_token("operator", Role.OPERATOR, secret_key=config.jwt_secret_key)
     async with client as ac:
+        renewed = await ac.post("/api/auth/refresh", json={"refresh_token": refresh})
         launched = await ac.post("/api/scenarios/billing_unavailable", headers={
-            "Authorization": f"Bearer {(await ac.post('/api/auth/refresh', json={'refresh_token': refresh})).json()['access_token']}"
+            "Authorization": f"Bearer {renewed.json()['access_token']}"
         })
         workflow_id = launched.json()["workflow_id"]
-        renewed = await ac.post("/api/auth/refresh", json={"refresh_token": refresh})
         ticket = await ac.post(
             "/api/auth/sse-ticket",
             json={"workflow_id": workflow_id},
@@ -94,3 +94,56 @@ async def test_sse_ticket_can_be_issued_after_access_token_renewal(client):
         )
     assert ticket.status_code == 200
     assert ticket.json()["ticket"].startswith("sset_")
+
+
+@pytest.mark.asyncio
+async def test_production_login_requires_password(monkeypatch):
+    """
+    Production requires an explicit password.
+    Username-only is rejected in production, but accepted in non-production demo mode.
+    """
+    from dataclasses import replace
+    # 1. Non-production / development environment: demo fallback allowed
+    monkeypatch.setattr("backend.api.server.config", replace(config, environment="development"))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        res_dev = await ac.post("/api/auth/login", json={"username": "operator"})
+        assert res_dev.status_code == 200
+        assert res_dev.json()["role"] == "operator"
+
+    # 2. Production environment: username only is DENIED (HTTP 401)
+    monkeypatch.setattr("backend.api.server.config", replace(config, environment="production"))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        res_prod_nopass = await ac.post("/api/auth/login", json={"username": "operator"})
+        assert res_prod_nopass.status_code == 401
+        assert "Password is required" in res_prod_nopass.json()["detail"]
+
+        # Production with incorrect password: is DENIED (HTTP 401)
+        res_prod_badpass = await ac.post(
+            "/api/auth/login",
+            json={"username": "operator", "password": "WrongPassword!2026"},
+        )
+        assert res_prod_badpass.status_code == 401
+
+        # Production with correct password for operator: SUCCEEDS (HTTP 200)
+        res_prod_ok = await ac.post(
+            "/api/auth/login",
+            json={"username": "operator", "password": "OperatorSecurePass!2026"},
+        )
+        assert res_prod_ok.status_code == 200
+        assert res_prod_ok.json()["role"] == "operator"
+
+        # Production with correct password for approver: SUCCEEDS (HTTP 200)
+        res_approver = await ac.post(
+            "/api/auth/login",
+            json={"username": "approver", "password": "ApproverSecurePass!2026"},
+        )
+        assert res_approver.status_code == 200
+        assert res_approver.json()["role"] == "approver"
+
+        # Production with correct password for admin: SUCCEEDS (HTTP 200)
+        res_admin = await ac.post(
+            "/api/auth/login",
+            json={"username": "admin", "password": "AdminSecurePass!2026"},
+        )
+        assert res_admin.status_code == 200
+        assert res_admin.json()["role"] == "admin"

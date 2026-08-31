@@ -588,8 +588,24 @@ async def login(req: LoginRequest) -> dict[str, Any]:
     username = req.username.strip()
     password = req.password or ""
 
-    # In demo/evaluation environments, supply default persona password if empty
+    # In production, explicit password is required; default password substitution is prohibited
     if not password:
+        if config.is_production:
+            record_security_audit_event(
+                event_type="AUTH_LOGIN_FAILED",
+                actor_id=username,
+                role="unknown",
+                tenant_id="unknown",
+                workflow_id=None,
+                action="login",
+                outcome="DENIED",
+                reason="Password is required in production environment",
+            )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Password is required in production environment",
+            )
+        # In non-production / demo environments, supply default persona password if empty
         if username in ("admin", "admin-1"):
             password = "AdminSecurePass!2026"
         elif username in ("operator", "operator-1", "operator-alice", "operator-acme", "operator-globex"):
