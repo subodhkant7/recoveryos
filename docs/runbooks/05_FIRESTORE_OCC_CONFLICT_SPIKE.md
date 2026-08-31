@@ -6,8 +6,6 @@
 
 ## 2. Diagnosis & Inspection Commands
 ```bash
-export PATH="/Users/urjasoft/Documents/Recovery OS/google-cloud-sdk/bin:$PATH"
-
 # Query OCC mismatch logs
 gcloud logging read 'jsonPayload.event_name="WORKER_OCC_CONFLICT"' \
   --project=recoveryos-506713 \

@@ -6,8 +6,6 @@
 
 ## 2. Diagnosis & Inspection Commands
 ```bash
-export PATH="/Users/urjasoft/Documents/Recovery OS/google-cloud-sdk/bin:$PATH"
-
 # 1. Read recent API error logs
 gcloud logging read 'resource.labels.service_name="recoveryos" AND severity>=ERROR' \
   --project=recoveryos-506713 \

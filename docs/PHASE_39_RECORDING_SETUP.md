@@ -40,7 +40,7 @@ Before starting the screen recording, launch the clean local server:
 
 ```bash
 # 1. Open Terminal and activate virtualenv
-cd "/Users/urjasoft/Documents/Recovery OS"
+cd "Recovery OS"
 source .venv/bin/activate
 
 # 2. Run clean secret scan & test verification

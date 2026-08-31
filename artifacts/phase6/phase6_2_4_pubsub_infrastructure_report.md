@@ -9,7 +9,7 @@
 The Google Cloud Pub/Sub infrastructure and Cloud Tasks dispatch queue have been provisioned in project `recoveryos-506713` (`asia-east1`) and empirically verified via live test message publishing, pulling, and acknowledgement.
 
 - **Empirical Regression Battery:** **209 PASSED, 0 SKIPPED, 0 FAILED (18.41s)** across all 22 test files.
-- **New Infrastructure Contract Tests:** **10 PASSED, 0 FAILED** in [tests/test_pubsub_infrastructure_contract.py](file:///Users/urjasoft/Documents/Recovery%20OS/tests/test_pubsub_infrastructure_contract.py).
+- **New Infrastructure Contract Tests:** **10 PASSED, 0 FAILED** in [tests/test_pubsub_infrastructure_contract.py](../../tests/test_pubsub_infrastructure_contract.py).
 - **GCP Live Delivery Verification:** Synthetic test message `21084424840618722` successfully published to `recoveryos-workflow-execution`, pulled from `recoveryos-workflow-execution-worker`, and acknowledged with `ackStatus: SUCCESS`.
 - **Cloud Tasks Provisioning:** Queue `recoveryos-gemini-queue` provisioned in `asia-east1` with `maxDispatchesPerSecond: 0.25` ($\le 15\text{ RPM}$) and `maxConcurrentDispatches: 1`.
 - **Production Cloud Run Safety:** Active revision remains **`recoveryos-00004-sw7` (READY: True, Traffic: 100%)** with zero changes to serving containers.

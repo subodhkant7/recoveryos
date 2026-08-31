@@ -7,8 +7,6 @@
 
 ## 2. Diagnosis & Inspection Commands
 ```bash
-export PATH="/Users/urjasoft/Documents/Recovery OS/google-cloud-sdk/bin:$PATH"
-
 # 1. Query security-related event logs
 gcloud logging read 'jsonPayload.event_name=~"EVENT_TENANT_MISMATCH|WORKER_SECURITY_DENIED"' \
   --project=recoveryos-506713 \

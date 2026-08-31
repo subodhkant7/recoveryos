@@ -6,8 +6,6 @@
 
 ## 2. Diagnosis & Inspection Commands
 ```bash
-export PATH="/Users/urjasoft/Documents/Recovery OS/google-cloud-sdk/bin:$PATH"
-
 # 1. Inspect subscription details and backlog count
 gcloud pubsub subscriptions describe recoveryos-workflow-execution-worker \
   --project=recoveryos-506713 \

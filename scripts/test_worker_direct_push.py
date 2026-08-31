@@ -1,12 +1,13 @@
 import asyncio
 import base64
 import json
+import shutil
 import subprocess
 import httpx
 from google.oauth2 import credentials
 from backend.events.message_models import WorkflowExecutionMessage, WorkflowEventType
 
-SDK_GCLOUD = "/Users/urjasoft/Documents/Recovery OS/google-cloud-sdk/bin/gcloud"
+SDK_GCLOUD = shutil.which("gcloud") or "gcloud"
 WORKER_URL = "https://recoveryos-worker-321161003794.asia-east1.run.app"
 
 id_token = subprocess.check_output([SDK_GCLOUD, "auth", "print-identity-token"]).decode().strip()

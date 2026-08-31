@@ -16,7 +16,7 @@ Production release readiness is designated **CONDITIONALLY PRODUCTION READY** be
 ## 2. Independent Forensic Domain Audit
 
 ### Domain 1: Workflow State Machine & State Lifecycle
-- **Transition Graph:** Evaluated against `VALID_TRANSITIONS` in [backend/engine/workflow_engine.py](file:///Users/urjasoft/Documents/Recovery%20OS/backend/engine/workflow_engine.py). Every transition is deterministic and guarded by OCC versions.
+- **Transition Graph:** Evaluated against `VALID_TRANSITIONS` in [backend/engine/workflow_engine.py](../../backend/engine/workflow_engine.py). Every transition is deterministic and guarded by OCC versions.
 - **`UNKNOWN` State Semantics:** Any unhandled agent exception or timeout in `_run_agent` transitions the workflow to `UNKNOWN` with an immutable audit event (`GEM-11`, `GEM-12`), eliminating permanently stranded `EXECUTING` workflows.
 - **Terminal Immutability:** `COMPLETED` and `ESCALATED` states reject all state transitions, tool executions, and approval attempts (`DUR-09`, `AUTH-15`).
 - **Verdict:** **PROVEN & ROBUST**.

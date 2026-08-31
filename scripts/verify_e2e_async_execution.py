@@ -12,6 +12,7 @@ Exercises:
 
 import json
 import os
+import shutil
 import subprocess
 import time
 import uuid
@@ -22,7 +23,7 @@ from backend.security.principal import Role
 from backend.events.message_models import WorkflowExecutionMessage, WorkflowEventType
 
 
-SDK_GCLOUD = "/Users/urjasoft/Documents/Recovery OS/google-cloud-sdk/bin/gcloud"
+SDK_GCLOUD = shutil.which("gcloud") or "gcloud"
 API_URL = "https://recoveryos-321161003794.asia-east1.run.app"
 WORKER_URL = "https://recoveryos-worker-321161003794.asia-east1.run.app"
 GCP_PROJECT = "recoveryos-506713"

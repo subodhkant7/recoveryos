@@ -9,7 +9,7 @@
 The application-level event contract and message handling boundaries for distributed asynchronous workflow execution have been implemented and validated locally.
 
 - **Deterministic Battery:** **159 PASSED, 0 SKIPPED, 0 FAILED (9.10s)**
-- **New Unit Tests Added:** **20 PASSED, 0 FAILED** in [tests/test_pubsub_message_contract.py](file:///Users/urjasoft/Documents/Recovery%20OS/tests/test_pubsub_message_contract.py).
+- **New Unit Tests Added:** **20 PASSED, 0 FAILED** in [tests/test_pubsub_message_contract.py](../../tests/test_pubsub_message_contract.py).
 - **Production Status:** Zero production GCP resources created or modified; Cloud Run service `recoveryos-00004-sw7` remains unaffected.
 
 ---
@@ -18,11 +18,11 @@ The application-level event contract and message handling boundaries for distrib
 
 | File Path | Component | Description |
 | :--- | :--- | :--- |
-| `[NEW]` [backend/events/__init__.py](file:///Users/urjasoft/Documents/Recovery%20OS/backend/events/__init__.py) | Module Exports | Exports public event classes, models, publisher factories, and consumer handlers. |
-| `[NEW]` [backend/events/message_models.py](file:///Users/urjasoft/Documents/Recovery%20OS/backend/events/message_models.py) | Message Schema | `WorkflowExecutionMessage` Pydantic model with strict validation for schema version, UUIDs, OCC expected version, and timestamps. |
-| `[NEW]` [backend/events/publisher.py](file:///Users/urjasoft/Documents/Recovery%20OS/backend/events/publisher.py) | Publisher Abstraction | `BaseEventPublisher` interface, `InMemoryEventPublisher` (with lock and failure simulation), and `GooglePubSubPublisher` boundary. |
-| `[NEW]` [backend/events/consumer.py](file:///Users/urjasoft/Documents/Recovery%20OS/backend/events/consumer.py) | Ingestion Handler | `WorkflowEventConsumer` enforcing message validation, replay deduplication, tenant isolation, OCC version verification, terminal protection, and engine delegation. |
-| `[NEW]` [tests/test_pubsub_message_contract.py](file:///Users/urjasoft/Documents/Recovery%20OS/tests/test_pubsub_message_contract.py) | Test Suite | 20 unit tests verifying all contract, validation, replay, tenant, and OCC invariants. |
+| `[NEW]` [backend/events/__init__.py](../../backend/events/__init__.py) | Module Exports | Exports public event classes, models, publisher factories, and consumer handlers. |
+| `[NEW]` [backend/events/message_models.py](../../backend/events/message_models.py) | Message Schema | `WorkflowExecutionMessage` Pydantic model with strict validation for schema version, UUIDs, OCC expected version, and timestamps. |
+| `[NEW]` [backend/events/publisher.py](../../backend/events/publisher.py) | Publisher Abstraction | `BaseEventPublisher` interface, `InMemoryEventPublisher` (with lock and failure simulation), and `GooglePubSubPublisher` boundary. |
+| `[NEW]` [backend/events/consumer.py](../../backend/events/consumer.py) | Ingestion Handler | `WorkflowEventConsumer` enforcing message validation, replay deduplication, tenant isolation, OCC version verification, terminal protection, and engine delegation. |
+| `[NEW]` [tests/test_pubsub_message_contract.py](../../tests/test_pubsub_message_contract.py) | Test Suite | 20 unit tests verifying all contract, validation, replay, tenant, and OCC invariants. |
 
 ---
 

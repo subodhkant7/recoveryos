@@ -7,6 +7,7 @@ and Secret Manager.
 """
 
 import os
+import shutil
 import subprocess
 import time
 from datetime import timedelta
@@ -21,11 +22,14 @@ CLOUD_RUN_URL = "https://recoveryos-321161003794.asia-east1.run.app"
 GCP_PROJECT = "recoveryos-506713"
 
 
+def _get_gcloud_bin() -> str:
+    return shutil.which("gcloud") or "gcloud"
+
+
 @pytest.fixture(scope="session")
 def gcp_identity_token():
     """Obtain valid GCP Identity Token to pass Cloud Run edge IAM."""
-    sdk_gcloud = "/Users/urjasoft/Documents/Recovery OS/google-cloud-sdk/bin/gcloud"
-    cmd = [sdk_gcloud if os.path.exists(sdk_gcloud) else "gcloud", "auth", "print-identity-token"]
+    cmd = [_get_gcloud_bin(), "auth", "print-identity-token"]
     try:
         token = subprocess.check_output(cmd).decode().strip()
         return token
@@ -36,9 +40,8 @@ def gcp_identity_token():
 @pytest.fixture(scope="session")
 def jwt_secret():
     """Retrieve the production JWT secret key from Secret Manager."""
-    sdk_gcloud = "/Users/urjasoft/Documents/Recovery OS/google-cloud-sdk/bin/gcloud"
     cmd = [
-        sdk_gcloud if os.path.exists(sdk_gcloud) else "gcloud",
+        _get_gcloud_bin(),
         "secrets", "versions", "access", "latest",
         f"--secret=recoveryos-jwt-secret",
         f"--project={GCP_PROJECT}",
@@ -63,7 +66,10 @@ def api_client():
 
 def test_prod_01_public_judge_access_to_health(api_client):
     """Phase 40: Public judge demonstration service is accessible without private IAM authentication."""
-    response = api_client.get("/api/health")
+    try:
+        response = api_client.get("/api/health")
+    except (httpx.ConnectError, httpx.ConnectTimeout, httpx.NetworkError) as e:
+        pytest.skip(f"Cloud Run endpoint unreachable (offline / no network): {e}")
     assert response.status_code == 200, f"Expected 200 OK for judge access, got {response.status_code}"
     data = response.json()
     assert data["status"] == "healthy"
@@ -253,9 +259,8 @@ def test_prod_12_prometheus_metrics_export(api_client, gcp_identity_token):
 
 def test_prod_13_cloud_logging_sanitization(jwt_secret):
     """Verify that Cloud Logging logs do not contain leaked secrets, JWTs, or API keys."""
-    sdk_gcloud = "/Users/urjasoft/Documents/Recovery OS/google-cloud-sdk/bin/gcloud"
     cmd = [
-        sdk_gcloud if os.path.exists(sdk_gcloud) else "gcloud",
+        _get_gcloud_bin(),
         "logging", "read",
         f"resource.type=cloud_run_revision AND resource.labels.service_name=recoveryos AND resource.labels.revision_name=recoveryos-00004-sw7",
         "--limit=50",

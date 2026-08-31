@@ -5,12 +5,13 @@ Uses auto-refreshed access tokens and parallel async deletions.
 
 import asyncio
 import os
+import shutil
 import subprocess
 import sys
 from google.oauth2 import credentials
 from google.cloud import firestore
 
-SDK_GCLOUD = "/Users/urjasoft/Documents/Recovery OS/google-cloud-sdk/bin/gcloud"
+SDK_GCLOUD = shutil.which("gcloud") or "gcloud"
 PROJECT_ID = "recoveryos-506713"
 DATABASE = "recoveryosdb"
 

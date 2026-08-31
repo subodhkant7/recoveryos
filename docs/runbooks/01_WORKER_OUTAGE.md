@@ -7,8 +7,6 @@
 
 ## 2. Diagnosis & Inspection Commands
 ```bash
-export PATH="/Users/urjasoft/Documents/Recovery OS/google-cloud-sdk/bin:$PATH"
-
 # 1. Check worker service status and active revision
 gcloud run services describe recoveryos-worker \
   --project=recoveryos-506713 \

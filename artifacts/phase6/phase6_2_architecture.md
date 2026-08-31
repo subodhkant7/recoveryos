@@ -103,7 +103,7 @@ Phase 6.2 designs the distributed asynchronous architecture for RecoveryOS. It d
 8. ACK message on success; NACK on retryable failure; route to dead-letter on terminal unrecoverable error.
 
 ### F. Message Schema
-Defined in detail in [artifacts/phase6/phase6_2_message_contract.md](file:///Users/urjasoft/Documents/Recovery%20OS/artifacts/phase6/phase6_2_message_contract.md).
+Defined in detail in [artifacts/phase6/phase6_2_message_contract.md](../../artifacts/phase6/phase6_2_message_contract.md).
 
 ### G. Idempotency & Effectively-Once Effect Strategy
 - **Message Deduplication Key:** `msg_claim_{message_id}` stored in Firestore with 24h TTL.

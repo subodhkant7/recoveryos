@@ -7,8 +7,6 @@
 
 ## 2. Diagnosis & Inspection Commands
 ```bash
-export PATH="/Users/urjasoft/Documents/Recovery OS/google-cloud-sdk/bin:$PATH"
-
 # 1. Check Cloud Run CPU & Memory utilization metrics
 gcloud run services describe recoveryos \
   --project=recoveryos-506713 \

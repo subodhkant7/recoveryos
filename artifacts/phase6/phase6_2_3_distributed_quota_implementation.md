@@ -9,7 +9,7 @@
 The two-tier distributed Gemini quota coordination architecture (Cloud Tasks dispatch pacing + Firestore transactional leased-window safety limiter) has been implemented, validated locally, and verified against the live local Firestore emulator across multiple independent OS processes.
 
 - **Deterministic Battery:** **199 PASSED, 0 SKIPPED, 0 FAILED (20.78s)** across all 21 test files.
-- **New Unit Tests Added:** **15 PASSED, 0 FAILED** in [tests/test_distributed_gemini_quota.py](file:///Users/urjasoft/Documents/Recovery%20OS/tests/test_distributed_gemini_quota.py).
+- **New Unit Tests Added:** **15 PASSED, 0 FAILED** in [tests/test_distributed_gemini_quota.py](../../tests/test_distributed_gemini_quota.py).
 - **Multi-Process Concurrency Test:** Verified real cross-process serialization against Firestore emulator (`test_10_multiprocess_cross_process_serialization` PASSED).
 - **Production Status:** Verified via `gcloud run services describe recoveryos --region=asia-east1`: active revision remains **`recoveryos-00004-sw7` (READY: True)**; zero production cloud resources modified.
 
@@ -19,8 +19,8 @@ The two-tier distributed Gemini quota coordination architecture (Cloud Tasks dis
 
 | File Path | Component | Description |
 | :--- | :--- | :--- |
-| `[NEW]` [backend/llm/distributed_quota.py](file:///Users/urjasoft/Documents/Recovery%20OS/backend/llm/distributed_quota.py) | Quota Subsystem | Implements `BaseDistributedQuotaLimiter`, `InMemoryDistributedQuotaLimiter`, `FirestoreDistributedQuotaLimiter`, and Cloud Tasks pacer abstractions (`FakeCloudTasksPacer`, `GcpCloudTasksPacer`). |
-| `[NEW]` [tests/test_distributed_gemini_quota.py](file:///Users/urjasoft/Documents/Recovery%20OS/tests/test_distributed_gemini_quota.py) | Test Suite | 15 unit tests covering in-memory coordination, Firestore OCC transactions, fail-closed handling, multiprocess execution, and circuit breaker integration. |
+| `[NEW]` [backend/llm/distributed_quota.py](../../backend/llm/distributed_quota.py) | Quota Subsystem | Implements `BaseDistributedQuotaLimiter`, `InMemoryDistributedQuotaLimiter`, `FirestoreDistributedQuotaLimiter`, and Cloud Tasks pacer abstractions (`FakeCloudTasksPacer`, `GcpCloudTasksPacer`). |
+| `[NEW]` [tests/test_distributed_gemini_quota.py](../../tests/test_distributed_gemini_quota.py) | Test Suite | 15 unit tests covering in-memory coordination, Firestore OCC transactions, fail-closed handling, multiprocess execution, and circuit breaker integration. |
 
 ---
 

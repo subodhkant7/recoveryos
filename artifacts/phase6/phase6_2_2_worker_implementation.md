@@ -9,7 +9,7 @@
 The dedicated worker execution service boundary, delivery decision framework (ACK / NACK / DEAD_LETTER), failure classification (RETRYABLE vs PERMANENT), security provenance validator, and crash-safety protections have been implemented and locally verified.
 
 - **Deterministic Battery:** **184 PASSED, 0 SKIPPED, 0 FAILED (9.34s)** across all 20 test files.
-- **New Unit Tests Added:** **25 PASSED, 0 FAILED** in [tests/test_worker_execution.py](file:///Users/urjasoft/Documents/Recovery%20OS/tests/test_worker_execution.py).
+- **New Unit Tests Added:** **25 PASSED, 0 FAILED** in [tests/test_worker_execution.py](../../tests/test_worker_execution.py).
 - **Concurrency & Deduplication Races:** Verified 2, 5, and 10 concurrent worker instances racing for the same message with 100% mutual exclusion and exactly-once effects.
 - **Production Status:** Zero production GCP resources created or modified; Cloud Run service `recoveryos-00004-sw7` remains unaffected.
 
@@ -19,12 +19,12 @@ The dedicated worker execution service boundary, delivery decision framework (AC
 
 | File Path | Component | Description |
 | :--- | :--- | :--- |
-| `[NEW]` [backend/worker/__init__.py](file:///Users/urjasoft/Documents/Recovery%20OS/backend/worker/__init__.py) | Module Exports | Exports `WorkflowWorkerService`, delivery models, and security validators. |
-| `[NEW]` [backend/worker/models.py](file:///Users/urjasoft/Documents/Recovery%20OS/backend/worker/models.py) | Delivery Models | `DeliveryStatus` (`ACK`, `NACK`, `DEAD_LETTER`), `FailureClassification` (`RETRYABLE`, `PERMANENT`), and `WorkerExecutionResult`. |
-| `[NEW]` [backend/worker/security.py](file:///Users/urjasoft/Documents/Recovery%20OS/backend/worker/security.py) | Security Validator | `BaseWorkerSecurityValidator` & `DefaultWorkerSecurityValidator` enforcing producer provenance and tenant structure. |
-| `[NEW]` [backend/worker/service.py](file:///Users/urjasoft/Documents/Recovery%20OS/backend/worker/service.py) | Worker Execution Engine | `WorkflowWorkerService` coordinating ingress parsing, security validation, consumer delegation, error mapping, and secret-redacted error messages. |
-| `[MODIFY]` [backend/observability/logging.py](file:///Users/urjasoft/Documents/Recovery%20OS/backend/observability/logging.py) | Secret Redaction | Enhanced `JWT_PATTERN` and `API_KEY_PATTERN` regex to robustly redact truncated tokens. |
-| `[NEW]` [tests/test_worker_execution.py](file:///Users/urjasoft/Documents/Recovery%20OS/tests/test_worker_execution.py) | Test Suite | 25 unit tests covering delivery decisions, 2/5/10 worker races, Crash Cases A–H, shutdown draining, and invariant gates. |
+| `[NEW]` [backend/worker/__init__.py](../../backend/worker/__init__.py) | Module Exports | Exports `WorkflowWorkerService`, delivery models, and security validators. |
+| `[NEW]` [backend/worker/models.py](../../backend/worker/models.py) | Delivery Models | `DeliveryStatus` (`ACK`, `NACK`, `DEAD_LETTER`), `FailureClassification` (`RETRYABLE`, `PERMANENT`), and `WorkerExecutionResult`. |
+| `[NEW]` [backend/worker/security.py](../../backend/worker/security.py) | Security Validator | `BaseWorkerSecurityValidator` & `DefaultWorkerSecurityValidator` enforcing producer provenance and tenant structure. |
+| `[NEW]` [backend/worker/service.py](../../backend/worker/service.py) | Worker Execution Engine | `WorkflowWorkerService` coordinating ingress parsing, security validation, consumer delegation, error mapping, and secret-redacted error messages. |
+| `[MODIFY]` [backend/observability/logging.py](../../backend/observability/logging.py) | Secret Redaction | Enhanced `JWT_PATTERN` and `API_KEY_PATTERN` regex to robustly redact truncated tokens. |
+| `[NEW]` [tests/test_worker_execution.py](../../tests/test_worker_execution.py) | Test Suite | 25 unit tests covering delivery decisions, 2/5/10 worker races, Crash Cases A–H, shutdown draining, and invariant gates. |
 
 ---
 

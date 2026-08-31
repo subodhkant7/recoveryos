@@ -1,10 +1,11 @@
 import asyncio
 import os
+import shutil
 import subprocess
 from google.oauth2 import credentials
 from backend.persistence.workflow_store import FirestoreWorkflowStore
 
-SDK_GCLOUD = "/Users/urjasoft/Documents/Recovery OS/google-cloud-sdk/bin/gcloud"
+SDK_GCLOUD = shutil.which("gcloud") or "gcloud"
 GCP_PROJECT = "recoveryos-506713"
 FIRESTORE_DB = "recoveryosdb"
 

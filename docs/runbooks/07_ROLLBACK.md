@@ -5,8 +5,6 @@
 
 ## 2. Diagnosis & Pre-Rollback Checks
 ```bash
-export PATH="/Users/urjasoft/Documents/Recovery OS/google-cloud-sdk/bin:$PATH"
-
 # 1. Verify rollback reserve revision exists and is Ready
 gcloud run revisions describe recoveryos-00006-jwt \
   --project=recoveryos-506713 \

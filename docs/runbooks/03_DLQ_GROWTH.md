@@ -6,8 +6,6 @@
 
 ## 2. Diagnosis & Inspection Commands
 ```bash
-export PATH="/Users/urjasoft/Documents/Recovery OS/google-cloud-sdk/bin:$PATH"
-
 # 1. Pull message payload from DLQ without auto-acking
 gcloud pubsub subscriptions pull recoveryos-workflow-execution-dlq-sub \
   --project=recoveryos-506713 \

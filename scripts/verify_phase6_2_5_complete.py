@@ -17,6 +17,7 @@ import asyncio
 import base64
 import json
 import os
+import shutil
 import subprocess
 import time
 import uuid
@@ -29,7 +30,7 @@ from backend.events.message_models import (
     WorkflowExecutionMessage,
 )
 
-SDK_GCLOUD = "/Users/urjasoft/Documents/Recovery OS/google-cloud-sdk/bin/gcloud"
+SDK_GCLOUD = shutil.which("gcloud") or "gcloud"
 GCP_PROJECT = "recoveryos-506713"
 FIRESTORE_DB = "recoveryosdb"
 WORKER_URL = "https://recoveryos-worker-321161003794.asia-east1.run.app"

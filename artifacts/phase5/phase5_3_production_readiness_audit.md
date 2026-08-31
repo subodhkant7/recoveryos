@@ -31,7 +31,7 @@ However, an exhaustive forensic inspection of the codebase reveals that the curr
 ## 1. Persistence Audit
 
 ### 1.1 In-Memory Persistence Layer vs. Durable Storage
-- **File:** [backend/persistence/workflow_store.py](file:///Users/urjasoft/Documents/Recovery%20OS/backend/persistence/workflow_store.py#L40-L50)
+- **File:** [backend/persistence/workflow_store.py](../../backend/persistence/workflow_store.py#L40-L50)
 - **Function/Area:** `WorkflowStore.__init__`
 - **Severity:** **CRITICAL**
 - **Problem:** While `WorkflowStore` docstrings describe Firestore collections (`workflows/{id}`, `steps/{id}`), the actual implementation uses in-memory Python dictionaries (`self._workflows`, `self._steps`, `self._events`, `self._evidence`, `self._failures`, `self._recovery_plans`, `self._approvals`, `self._idempotency`).
@@ -41,7 +41,7 @@ However, an exhaustive forensic inspection of the codebase reveals that the curr
 - **Regression Test Required:** Yes (Test state persistence across distinct store instances simulating process restart).
 
 ### 1.2 Non-Atomic Multi-Document Writes (Partial Write Risk)
-- **File:** [backend/tools/onboarding/tools.py](file:///Users/urjasoft/Documents/Recovery%20OS/backend/tools/onboarding/tools.py#L200-L212)
+- **File:** [backend/tools/onboarding/tools.py](../../backend/tools/onboarding/tools.py#L200-L212)
 - **Function/Area:** `OnboardingTools._execute_step`
 - **Severity:** **HIGH**
 - **Problem:** Step completion requires multiple separate async writes without a transaction:
@@ -58,7 +58,7 @@ However, an exhaustive forensic inspection of the codebase reveals that the curr
 ## 2. Concurrency Audit
 
 ### 2.1 Process-Local Concurrency Locking
-- **File:** [backend/persistence/workflow_store.py](file:///Users/urjasoft/Documents/Recovery%20OS/backend/persistence/workflow_store.py#L49-L56)
+- **File:** [backend/persistence/workflow_store.py](../../backend/persistence/workflow_store.py#L49-L56)
 - **Function/Area:** `WorkflowStore.get_lock`
 - **Severity:** **CRITICAL**
 - **Problem:** Concurrency synchronization uses `self._locks: dict[str, asyncio.Lock]`.
@@ -68,7 +68,7 @@ However, an exhaustive forensic inspection of the codebase reveals that the curr
 - **Regression Test Required:** Yes (Multi-process concurrent execution test).
 
 ### 2.2 TOCTOU (Time-of-Check to Time-of-Use) in State Transitions
-- **File:** [backend/engine/workflow_engine.py](file:///Users/urjasoft/Documents/Recovery%20OS/backend/engine/workflow_engine.py#L96-L118)
+- **File:** [backend/engine/workflow_engine.py](../../backend/engine/workflow_engine.py#L96-L118)
 - **Function/Area:** `WorkflowEngine.transition`
 - **Severity:** **HIGH**
 - **Problem:** `transition()` reads workflow data (`get_workflow`), validates state against `VALID_TRANSITIONS`, modifies `wf_data["state"]`, and calls `save_workflow()`.
@@ -82,7 +82,7 @@ However, an exhaustive forensic inspection of the codebase reveals that the curr
 ## 3. External Service Reliability Audit
 
 ### 3.1 Unbounded Network Timeouts & Missing Circuit Breakers
-- **File:** [backend/simulation/external_services.py](file:///Users/urjasoft/Documents/Recovery%20OS/backend/simulation/external_services.py#L250-L305) & [backend/tools/onboarding/tools.py](file:///Users/urjasoft/Documents/Recovery%20OS/backend/tools/onboarding/tools.py#L160-L172)
+- **File:** [backend/simulation/external_services.py](../../backend/simulation/external_services.py#L250-L305) & [backend/tools/onboarding/tools.py](../../backend/tools/onboarding/tools.py#L160-L172)
 - **Function/Area:** `OnboardingTools._execute_step`
 - **Severity:** **HIGH**
 - **Problem:** External calls invoke `action_fn(idempotency_key)` without explicit per-call `asyncio.timeout` wrappers, connection pooling limits, or circuit breakers.
@@ -92,7 +92,7 @@ However, an exhaustive forensic inspection of the codebase reveals that the curr
 - **Regression Test Required:** Yes (Simulated hanging network socket test).
 
 ### 3.2 Ambiguous HTTP 200 with Error Payloads
-- **File:** [backend/tools/onboarding/tools.py](file:///Users/urjasoft/Documents/Recovery%20OS/backend/tools/onboarding/tools.py#L173-L178)
+- **File:** [backend/tools/onboarding/tools.py](../../backend/tools/onboarding/tools.py#L173-L178)
 - **Function/Area:** `OnboardingTools._execute_step`
 - **Severity:** **MEDIUM**
 - **Problem:** Currently checked via `if isinstance(result, dict) and result.get("status") == "error"`. While this works for standard simulation dicts, external APIs often return `200 OK` with JSON bodies like `{"error": {"code": "card_declined"}}` or GraphQL errors `{"errors": [...]}`.
@@ -106,7 +106,7 @@ However, an exhaustive forensic inspection of the codebase reveals that the curr
 ## 4. Gemini / LLM Reliability Audit
 
 ### 4.1 Missing Runtime Rate Limiter & Backoff in Server Execution Loop
-- **File:** [backend/api/server.py](file:///Users/urjasoft/Documents/Recovery%20OS/backend/api/server.py#L252-L325)
+- **File:** [backend/api/server.py](../../backend/api/server.py#L252-L325)
 - **Function/Area:** `_run_agent`
 - **Severity:** **HIGH**
 - **Problem:** `GeminiRateLimiter` (enforcing $\ge 6.5\text{s}$ interval for 15 RPM safety) exists only in `tests/live_gemini_eval.py`. In `backend/api/server.py::_run_agent()`, the ADK `Runner` executes Gemini calls without runtime rate limiting, request throttling, or exponential backoff on HTTP 429.
@@ -116,7 +116,7 @@ However, an exhaustive forensic inspection of the codebase reveals that the curr
 - **Regression Test Required:** Yes (Inject 429 responses and verify retry backoff and recovery).
 
 ### 4.2 Unhandled Agent Exception Workflow Abandonment
-- **File:** [backend/api/server.py](file:///Users/urjasoft/Documents/Recovery%20OS/backend/api/server.py#L359-L369)
+- **File:** [backend/api/server.py](../../backend/api/server.py#L359-L369)
 - **Function/Area:** `_run_agent` exception handler
 - **Severity:** **HIGH**
 - **Problem:** If an unhandled exception occurs inside `_run_agent` (e.g. Gemini API timeout, network drop, memory error), the code catches it, logs an `Agent Execution Error` event, and returns. It **never transitions the workflow state**.
@@ -130,7 +130,7 @@ However, an exhaustive forensic inspection of the codebase reveals that the curr
 ## 5. Workflow & State Machine Correctness Audit
 
 ### 5.1 Missing `UNKNOWN` / `INDETERMINATE` Workflow State
-- **File:** [backend/models/workflow.py](file:///Users/urjasoft/Documents/Recovery%20OS/backend/models/workflow.py#L23-L43)
+- **File:** [backend/models/workflow.py](../../backend/models/workflow.py#L23-L43)
 - **Function/Area:** `WorkflowState` enum & `VALID_TRANSITIONS`
 - **Severity:** **HIGH**
 - **Problem:** `WorkflowState` contains only `CREATED`, `EXECUTING`, `RECOVERING`, `AWAITING_APPROVAL`, `VERIFYING`, `COMPLETED`, `ESCALATED`. There is no `UNKNOWN` state representing a workflow interrupted mid-mutation.
@@ -144,7 +144,7 @@ However, an exhaustive forensic inspection of the codebase reveals that the curr
 ## 6. Security Audit
 
 ### 6.1 Total Absence of API Authentication and Authorization
-- **File:** [backend/api/server.py](file:///Users/urjasoft/Documents/Recovery%20OS/backend/api/server.py#L80-L245)
+- **File:** [backend/api/server.py](../../backend/api/server.py#L80-L245)
 - **Function/Area:** All API Endpoints (`/api/scenarios/*`, `/api/workflows/*`, `/api/workflows/{id}/approve/{approval_id}`)
 - **Severity:** **CRITICAL**
 - **Problem:** There is no authentication middleware, API key validation, JWT bearer token check, or RBAC mechanism on any endpoint.
@@ -154,7 +154,7 @@ However, an exhaustive forensic inspection of the codebase reveals that the curr
 - **Regression Test Required:** Yes (Assert 401 Unauthorized on unauthenticated requests; assert 403 Forbidden for non-approver roles).
 
 ### 6.2 Wildcard CORS Policy
-- **File:** [backend/api/server.py](file:///Users/urjasoft/Documents/Recovery%20OS/backend/api/server.py#L46-L52)
+- **File:** [backend/api/server.py](../../backend/api/server.py#L46-L52)
 - **Function/Area:** `CORSMiddleware`
 - **Severity:** **HIGH**
 - **Problem:** `allow_origins=["*"]`, `allow_credentials=True`, `allow_methods=["*"]`, `allow_headers=["*"]`.
@@ -164,7 +164,7 @@ However, an exhaustive forensic inspection of the codebase reveals that the curr
 - **Regression Test Required:** Yes (Verify disallowed origins receive CORS rejection headers).
 
 ### 6.3 PII and Sensitive Data in Plaintext Logs and Events
-- **File:** [backend/engine/workflow_engine.py](file:///Users/urjasoft/Documents/Recovery%20OS/backend/engine/workflow_engine.py#L73-L80) & [backend/tools/onboarding/tools.py](file:///Users/urjasoft/Documents/Recovery%20OS/backend/tools/onboarding/tools.py#L98-L100)
+- **File:** [backend/engine/workflow_engine.py](../../backend/engine/workflow_engine.py#L73-L80) & [backend/tools/onboarding/tools.py](../../backend/tools/onboarding/tools.py#L98-L100)
 - **Function/Area:** `_record_event`, `_record_evidence`
 - **Severity:** **MEDIUM**
 - **Problem:** Customer metadata (`full_name`, `email`, `customer_id`), tool arguments, and external responses are saved directly into `WorkflowEvent.payload` and `Evidence.data` without PII or secret masking.
@@ -178,7 +178,7 @@ However, an exhaustive forensic inspection of the codebase reveals that the curr
 ## 7. API / Backend Audit
 
 ### 7.1 Ephemeral Background Task Execution (`asyncio.create_task`)
-- **File:** [backend/api/server.py](file:///Users/urjasoft/Documents/Recovery%20OS/backend/api/server.py#L116) & [backend/api/server.py](file:///Users/urjasoft/Documents/Recovery%20OS/backend/api/server.py#L236)
+- **File:** [backend/api/server.py](../../backend/api/server.py#L116) & [backend/api/server.py](../../backend/api/server.py#L236)
 - **Function/Area:** `launch_scenario`, `approve_workflow`
 - **Severity:** **HIGH**
 - **Problem:** Background agent workflows are dispatched using unmonitored `asyncio.create_task(_run_agent(workflow_id))`.
@@ -192,7 +192,7 @@ However, an exhaustive forensic inspection of the codebase reveals that the curr
 ## 8. Observability & Telemetry Audit
 
 ### 8.1 Missing Production Telemetry, Metrics & Distributed Tracing
-- **File:** [backend/api/server.py](file:///Users/urjasoft/Documents/Recovery%20OS/backend/api/server.py) & Entire Repository
+- **File:** [backend/api/server.py](../../backend/api/server.py) & Entire Repository
 - **Function/Area:** Entire Backend
 - **Severity:** **HIGH**
 - **Problem:** There is no OpenTelemetry tracing exporter, no Prometheus `/metrics` endpoint, and logging relies on standard Python output without structured JSON formatting.
@@ -209,7 +209,7 @@ However, an exhaustive forensic inspection of the codebase reveals that the curr
 ## 9. Configuration & Deployment Audit
 
 ### 9.1 Missing Containerization, IaC & Configuration Validation
-- **File:** [backend/config.py](file:///Users/urjasoft/Documents/Recovery%20OS/backend/config.py#L15-L54) & Root Workspace
+- **File:** [backend/config.py](../../backend/config.py#L15-L54) & Root Workspace
 - **Function/Area:** `Config` dataclass and root directory
 - **Severity:** **MEDIUM**
 - **Problem:**
