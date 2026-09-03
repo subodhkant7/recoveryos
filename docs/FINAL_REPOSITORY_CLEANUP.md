@@ -6,7 +6,7 @@ The repository was cleaned, audited, and hardened for public release:
 - Historical intermediate phase reports (Phases 6–32) were safely relocated outside the repository to `../RecoveryOS-archive/phase-reports/`.
 - Obvious OS metadata junk (`.DS_Store`) was purged from the working tree.
 - Core engineering documentation, runbooks, and checklists were verified and retained.
-- All 37 test suites (377 passing tests) were preserved to guarantee 100% regression and security coverage.
+- All test suites (current: 531 passed, 19 skipped, 0 failed across 47 test files; Phase 37 baseline: 377 passed) were preserved to guarantee 100% regression and security coverage.
 - Git commit history was preserved with zero force-pushes or branch rewrites.
 
 ---
@@ -56,7 +56,7 @@ All 37 test files were retained in `tests/`:
 - `tests/test_frontend_experience.py` (4 frontend API tests)
 - 31 core unit, integration, concurrency, security, and persistence test suites
 
-**Clean Regression Result**: **377 passed, 15 skipped, 0 failed in 40.79s**.
+**Clean Regression Result**: **531 passed, 19 skipped, 0 failed** (Phase 37 historical baseline: 377 passed, 15 skipped, 0 failed in 40.79s).
 
 ---
 
@@ -78,7 +78,7 @@ HISTORICAL_ARCHIVE=COMPLETE
 DS_STORE_CLEANUP=PASS
 GITIGNORE_AUDIT=PASS
 CURRENT_TREE_SECRET_SCAN=PASS
-REGRESSION=377_PASSED_0_FAILED
+REGRESSION=531_PASSED_0_FAILED
 TARGETED_ATTACK_TESTS=16_PASSED_0_FAILED
 WORKING_TREE=CLEAN
 HISTORY_REWRITTEN=NO

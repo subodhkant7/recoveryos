@@ -3,7 +3,7 @@
 **Environment**: Production (`recoveryos-506713` / `asia-east1`)  
 **Active Services**:
 - API: `recoveryos` (`https://recoveryos-321161003794.asia-east1.run.app`) -> Active Revision: `recoveryos-00019-vog`
-- Worker: `recoveryos-worker` (`https://recoveryos-worker-321161003794.asia-east1.run.app`) -> Active Revision: `recoveryos-worker-00009-829`
+- Worker: `recoveryos-worker` (`https://recoveryos-worker-321161003794.asia-east1.run.app`) -> Active Revision: `recoveryos-worker-00039-lhd`
 - Pub/Sub Topic: `recoveryos-workflow-execution`
 - Worker Push Subscription: `recoveryos-workflow-execution-worker`
 - DLQ Topic / Subscription: `recoveryos-workflow-execution-dlq` / `recoveryos-workflow-execution-dlq-sub`

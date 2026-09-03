@@ -41,7 +41,7 @@ Because **Action Executed ≠ Recovery Verified**. In production systems, an API
 ---
 
 ### 7. What prevents duplicate execution?
-Every mutating tool invocation generates a deterministic idempotency key (`workflow_id:step_id:attempt_count`). The persistence layer (`backend/persistence/workflow_store.py:save_idempotency_record`) records every operation. If a duplicate command arrives or a worker resumes, the system recognizes the existing key and returns the cached result without executing a second external mutation.
+Every mutating tool invocation generates a deterministic idempotency key (`idem:{workflow_id}:{tool_name}:{target_entity_id}:{param_hash}`). The persistence layer (`backend/persistence/workflow_store.py:save_idempotency_record`) records every operation. If a duplicate command arrives or a worker resumes, the system recognizes the existing key and returns the cached result without executing a second external mutation.
 
 ---
 
@@ -78,7 +78,7 @@ The LLM does not own the state transition to `COMPLETED`. Deterministic Python a
 
 ### 13. What parts are real versus simulated?
 - **Real**: FastAPI backend, JWT authentication, RBAC authorization, Pydantic data models, deterministic state machine, OCC concurrency control, Pub/Sub event publishers, SSE ticket generation and streaming, and frontend event machine.
-- **Simulated**: External SaaS endpoints (Stripe, Adyen, Experian, Equifax) run in high-fidelity simulated services (`backend/simulation/external_services.py`) to allow controllable, deterministic failure injection during hackathon evaluation.
+- **Simulated**: External SaaS endpoints (Stripe, PayPal, Square) run in high-fidelity simulated services (`backend/simulation/external_services.py`) to allow controllable, deterministic failure injection during hackathon evaluation.
 
 ---
 

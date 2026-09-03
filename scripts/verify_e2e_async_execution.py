@@ -68,12 +68,18 @@ def run_e2e_verification():
             f"{API_URL}/api/scenarios/billing_unavailable",
             headers=headers,
         )
-        assert res.status_code == 200, f"API launch failed: {res.status_code} {res.text}"
+        # Asynchronous Pub/Sub dispatch returns HTTP 202; direct/in-memory dispatch returns HTTP 200
+        assert res.status_code in (200, 202), f"API launch failed: {res.status_code} {res.text}"
         wf_data = res.json()
+        if res.status_code == 202:
+            assert wf_data.get("status") == "dispatched", f"Expected 'dispatched' status for 202: {wf_data}"
+            assert "pubsub_message_id" in wf_data, f"Expected pubsub_message_id in 202 response: {wf_data}"
+        else:
+            assert wf_data.get("status") == "launched", f"Expected 'launched' status for 200: {wf_data}"
         wf_id = wf_data["workflow_id"]
-        init_state = wf_data.get("state")
-        init_ver = wf_data.get("version")
-        print(f" [2/6] Workflow launched on API Service: ID={wf_id}, State={init_state}, Version={init_ver}")
+        init_state = wf_data.get("state", "CREATED")
+        init_ver = wf_data.get("version", 1)
+        print(f" [2/6] Workflow dispatched on API Service (HTTP {res.status_code}): ID={wf_id}, State={init_state}, Version={init_ver}")
 
         # 3. Construct and Publish Message to Pub/Sub
         msg_id = f"msg-e2e-{uuid.uuid4().hex[:8]}"
@@ -98,8 +104,11 @@ def run_e2e_verification():
             f"--attribute=message_id={msg_id},event_type=WORKFLOW_DISPATCH,schema_version=1.0.0,tenant_id=tenant-acme,workflow_id={wf_id},expected_version=1,correlation_id={corr_id}",
             f"--project={GCP_PROJECT}",
         ]
-        pub_out = subprocess.check_output(pub_cmd).decode()
-        print(f" [3/6] Message published to Pub/Sub: {pub_out.strip()}")
+        if res.status_code == 202 and wf_data.get("pubsub_message_id"):
+            print(f" [3/6] Message published to Pub/Sub by API service: ID={wf_data['pubsub_message_id']}")
+        else:
+            pub_out = subprocess.check_output(pub_cmd).decode()
+            print(f" [3/6] Message published to Pub/Sub: {pub_out.strip()}")
 
         # 4. Poll for Asynchronous Execution by recoveryos-worker
         print(" [4/6] Polling API Service for asynchronous worker state transition in Firestore...")

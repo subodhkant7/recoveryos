@@ -6,13 +6,13 @@ This checklist certifies all product, autonomy, resilience, UI, security, and te
 
 ### 1. PRODUCT
 - [x] **Core Value Proposition Clear**: "When infrastructure fails, RecoveryOS doesn't just execute a playbook. It observes, reasons, acts, verifies — and proves recovery."
-- [x] **Autonomous Recovery Demonstrated**: Scenario 01 correlates failure, switches payment gateway to Adyen, verifies via probe, and issues proof.
+- [x] **Autonomous Recovery Demonstrated**: Scenario 01 correlates failure, switches payment gateway to PayPal, verifies via probe, and issues proof.
 - [x] **Verification Demonstrated**: Independent probe verifies outcome before workflow completes.
 - [x] **Recovery Proof Demonstrated**: Certificate renders MTTR, intervention count, action taken, and outcome verification.
 
 ### 2. AUTONOMY & POLICY
 - [x] **Autonomous Action Allowed When Policy Permits**: Confidence HIGH and constraint violations 0 allows automated failover.
-- [x] **Conflicting Evidence Stops Execution**: Scenario 02 halts at autonomy boundary when risk bureau data conflicts.
+- [x] **Conflicting Evidence Stops Execution**: Scenario 02 halts at autonomy boundary when independent verification detects billing plan tier mismatch (starter vs enterprise).
 - [x] **Human Approval Path Works**: Approver can sign off via `POST /api/workflows/{id}/approve/{id}` to resume workflow.
 - [x] **Rejection Path Works**: Operator can reject approval to transition workflow cleanly to `ESCALATED`.
 
@@ -38,7 +38,7 @@ This checklist certifies all product, autonomy, resilience, UI, security, and te
 - [x] **No Unsafe Debug Endpoints**: All mutation routes require valid authentication.
 
 ### 6. TESTING & VALIDATION
-- [x] **Full Regression Suite**: 377 passed, 15 skipped, 0 failed in clean environment.
+- [x] **Full Regression Suite**: 531 passed, 19 skipped, 0 failed in clean environment.
 - [x] **Phase 33 Engineering Validation Suite**: 16/16 tests passing (`tests/test_phase33_final_judge_attack.py`).
 - [x] **Phase 32 Demonstration Validation Suite**: 14/14 tests passing (`tests/test_phase32_demo_attack.py`).
 - [x] **Phase 31 Adversarial Audit Suite**: 19/19 tests passing (`tests/test_phase31_adversarial_audit.py`).
